@@ -45,9 +45,11 @@ public struct AddFriendView: View {
     @State private var isSearching = false
     @State private var showFriendDetail = false
     @State private var addFriendInfo: ContactInfo?
-    private var contactStore = ContactListStore.create()
+    private let contactStore: ContactListStore
 
-    public init() {}
+    public init(contactStore: ContactListStore = ContactListStore.create()) {
+        self.contactStore = contactStore
+    }
 
     public var body: some View {
         NavigationView {
@@ -184,9 +186,11 @@ public struct JoinGroupView: View {
     @State private var isSearching = false
     @State private var showGroupDetail = false
     @State private var joinGroupInfo: ContactInfo?
-    private var contactStore = ContactListStore.create()
+    private let contactStore: ContactListStore
 
-    public init() {}
+    public init(contactStore: ContactListStore = ContactListStore.create()) {
+        self.contactStore = contactStore
+    }
 
     public var body: some View {
         NavigationView {
