@@ -85,18 +85,18 @@ const static BOOL ShowDurationLabel = YES;
     _previewView = [[UIView alloc] init];
     [self addSubview:_previewView];
     [_previewView mas_remakeConstraints:^(MASConstraintMaker *make) {
-      make.top.equalTo(self);
-      make.width.equalTo(self);
-      make.height.equalTo(_previewView.mas_width).multipliedBy(16.0 / 9.0);
+        make.top.equalTo(self);
+        make.width.equalTo(self);
+        make.height.equalTo(_previewView.mas_width).multipliedBy(16.0 / 9.0);
     }];
-
+    
     UIView *_bottomMaskView = [[UIView alloc] init];
     [self addSubview:_bottomMaskView];
     _bottomMaskView.backgroundColor = UIColor.blackColor;
-
+    
     [self initControlButtons];
     [self initFunctionButtons];
-
+    
     _lbDuration = [[UILabel alloc] init];
     [self addSubview:_lbDuration];
     _lbDuration.hidden = YES;
@@ -104,15 +104,15 @@ const static BOOL ShowDurationLabel = YES;
     _lbDuration.font = [UIFont monospacedSystemFontOfSize:18 weight:UIFontWeightMedium];
     _lbDuration.textColor = UIColor.whiteColor;
     [_lbDuration mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.bottom.equalTo(_btnRecord.mas_top).inset(8);
-      make.centerX.equalTo(_btnRecord);
+        make.bottom.equalTo(_btnRecord.mas_top).inset(8);
+        make.centerX.equalTo(_btnRecord);
     }];
-
+    
     [_bottomMaskView mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.left.right.bottom.equalTo(self);
-      make.top.equalTo(_lbDuration.mas_top).offset(-8);
+        make.left.right.bottom.equalTo(self);
+        make.top.equalTo(_lbDuration.mas_top).offset(-8);
     }];
-
+    
     _lbTip = [[UILabel alloc] init];
     [self addSubview:_lbTip];
     if (_isOnlySupportTakePhoto) {
@@ -120,13 +120,13 @@ const static BOOL ShowDurationLabel = YES;
     } else {
         _lbTip.text = [VideoRecorderCommon localizedStringForKey:@"record_tip"];
     }
-   
+    
     _lbTip.font = [UIFont systemFontOfSize:16];
     _lbTip.textColor = UIColor.whiteColor;
     [_lbTip mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.bottom.lessThanOrEqualTo(_previewView).inset(16);
-      make.bottom.lessThanOrEqualTo(_bottomMaskView.mas_top).offset(-16);
-      make.centerX.equalTo(self);
+        make.bottom.lessThanOrEqualTo(_previewView).inset(16);
+        make.bottom.lessThanOrEqualTo(_bottomMaskView.mas_top).offset(-16);
+        make.centerX.equalTo(self);
     }];
 }
 
@@ -139,24 +139,24 @@ const static BOOL ShowDurationLabel = YES;
     _btnRecord.progressSizePressed = BtnStartRecordProgressSizePressed;
     _btnRecord.isOnlySupportTakePhoto = _isOnlySupportTakePhoto;
     _btnRecord.delegate = self;
-    _btnExitRecord = [self newCustomButtonWithImage:VideoRecorderBundleThemeImage(@"record_exit_img", @"cross") onTouchUpInside:@selector(onBtnExitClick)];
-    _btnCameraSwitch = [self newCustomButtonWithImage:VideoRecorderBundleThemeImage(@"record_camera_switch_img", @"camera_switch")
+    _btnExitRecord = [self newCustomButtonWithImage:VideoRecorderBundleThemeImage(@"cross") onTouchUpInside:@selector(onBtnExitClick)];
+    _btnCameraSwitch = [self newCustomButtonWithImage:VideoRecorderBundleThemeImage(@"camera_switch")
                                       onTouchUpInside:@selector(onBtnCameraSwitchClick)];
-
+    
     [_btnRecord mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.width.height.mas_equalTo(BtnStartRecordSize);
-      make.centerX.equalTo(self);
-      make.bottom.equalTo(self.mas_safeAreaLayoutGuideBottom).inset(BtnStartRecordGapBottom);
+        make.width.height.mas_equalTo(BtnStartRecordSize);
+        make.centerX.equalTo(self);
+        make.bottom.equalTo(self.mas_safeAreaLayoutGuideBottom).inset(BtnStartRecordGapBottom);
     }];
     [_btnExitRecord mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.size.mas_equalTo(BtnExitRecordSize);
-      make.centerY.equalTo(_btnRecord);
-      make.right.equalTo(_btnRecord.mas_left).inset(BtnExitRecordGapToStartRecord);
+        make.size.mas_equalTo(BtnExitRecordSize);
+        make.centerY.equalTo(_btnRecord);
+        make.right.equalTo(_btnRecord.mas_left).inset(BtnExitRecordGapToStartRecord);
     }];
     [_btnCameraSwitch mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.size.mas_equalTo(BtnCameraSwitch);
-      make.centerY.equalTo(_btnRecord);
-      make.left.equalTo(_btnRecord.mas_right).inset(BtnCameraSwitchGapToStartRecord);
+        make.size.mas_equalTo(BtnCameraSwitch);
+        make.centerY.equalTo(_btnRecord);
+        make.left.equalTo(_btnRecord.mas_right).inset(BtnCameraSwitchGapToStartRecord);
     }];
 }
 
@@ -171,13 +171,12 @@ const static BOOL ShowDurationLabel = YES;
         return;
     }
     
-    _btnFlash = [self newFunctionButtonWithImage:VideoRecorderBundleThemeImage(@"record_flash_close_img", @"flash_close")
-                                           title:[VideoRecorderCommon localizedStringForKey:@"flash"]
+    _btnFlash = [self newFunctionButtonWithImage:VideoRecorderBundleThemeImage(@"flash_close")                                    title:[VideoRecorderCommon localizedStringForKey:@"flash"]
                                  onTouchUpInside:@selector(onBtnFlashClick)];
     
     [_btnFlash mas_makeConstraints:^(MASConstraintMaker *make) {
-      make.right.equalTo(self).inset(FunctionBtnToRight);
-      make.top.equalTo(self).inset(FunctionBtnToToTop);
+        make.right.equalTo(self).inset(FunctionBtnToRight);
+        make.top.equalTo(self).inset(FunctionBtnToToTop);
     }];
     
     _lastFuncitonBtn = _btnFlash;
@@ -188,7 +187,7 @@ const static BOOL ShowDurationLabel = YES;
         return;
     }
     
-    _btnBeautify = [self newFunctionButtonWithImage:VideoRecorderBundleThemeImage(@"record_beautify_img", @"beauty_record")
+    _btnBeautify = [self newFunctionButtonWithImage:VideoRecorderBundleThemeImage(@"beauty_record")
                                               title:[VideoRecorderCommon localizedStringForKey:@"beautify"]
                                     onTouchUpInside:@selector(onBtnBeautifyClick)];
     
@@ -209,7 +208,7 @@ const static BOOL ShowDurationLabel = YES;
         return;
     }
     
-    _btnAspect = [self newFunctionButtonWithImage:VideoRecorderBundleThemeImage(@"record_aspect_9_16_img", @"record_aspect_9_16")
+    _btnAspect = [self newFunctionButtonWithImage:VideoRecorderBundleThemeImage(@"record_aspect_9_16")
                                             title:[VideoRecorderCommon localizedStringForKey:@"aspect"]
                                   onTouchUpInside:@selector(onBtnAspectClick)];
     
@@ -229,11 +228,11 @@ const static BOOL ShowDurationLabel = YES;
     VideoRecorderIconLabelButtonView *btn = [VideoRecorderIconLabelButtonView buttonWithType:UIButtonTypeCustom];
     [btn setImage:img forState:UIControlStateNormal];
     [btn setAttributedTitle:[[NSAttributedString alloc]
-                                initWithString:title
-                                    attributes:@{
-                                        NSFontAttributeName : [UIFont systemFontOfSize:12],
-                                        NSForegroundColorAttributeName : VideoRecorderDynamicColor(@"record_func_btn_text_color", @"#FFFFFF"),
-                                    }]
+                             initWithString:title
+                             attributes:@{
+        NSFontAttributeName : [UIFont systemFontOfSize:12],
+        NSForegroundColorAttributeName : VideoRecorderDynamicColor(@"record_func_btn_text_color", @"#FFFFFF"),
+    }]
                    forState:UIControlStateNormal];
     [btn addTarget:self action:sel forControlEvents:UIControlEventTouchUpInside];
     btn.iconSize = BtnExtendFunctionIconSize;
@@ -278,20 +277,20 @@ const static BOOL ShowDurationLabel = YES;
 - (void)onBtnAspectClick {
     if (_aspectRatio == VideoRecorderRecordAspectRatio9_16) {
         _aspectRatio = VideoRecorderRecordAspectRatio3_4;
-        [_btnAspect setImage:VideoRecorderBundleThemeImage(@"record_aspect_3_4_img", @"record_aspect_3_4") forState:UIControlStateNormal];
-//        [_previewView mas_remakeConstraints:^(MASConstraintMaker *make) {
-//          make.center.equalTo(self);
-//          make.width.equalTo(self);
-//          make.height.equalTo(_previewView.mas_width).multipliedBy(4.0 / 3.0);
-//        }];
+        [_btnAspect setImage:VideoRecorderBundleThemeImage(@"record_aspect_3_4") forState:UIControlStateNormal];
+        //        [_previewView mas_remakeConstraints:^(MASConstraintMaker *make) {
+        //          make.center.equalTo(self);
+        //          make.width.equalTo(self);
+        //          make.height.equalTo(_previewView.mas_width).multipliedBy(4.0 / 3.0);
+        //        }];
     } else {
         _aspectRatio = VideoRecorderRecordAspectRatio9_16;
-        [_btnAspect setImage:VideoRecorderBundleThemeImage(@"record_aspect_9_16_img", @"record_aspect_9_16") forState:UIControlStateNormal];
-//        [_previewView mas_remakeConstraints:^(MASConstraintMaker *make) {
-//          make.top.equalTo(self);
-//          make.width.equalTo(self);
-//          make.height.equalTo(_previewView.mas_width).multipliedBy(16.0 / 9.0);
-//        }];
+        [_btnAspect setImage:VideoRecorderBundleThemeImage(@"record_aspect_9_16") forState:UIControlStateNormal];
+        //        [_previewView mas_remakeConstraints:^(MASConstraintMaker *make) {
+        //          make.top.equalTo(self);
+        //          make.width.equalTo(self);
+        //          make.height.equalTo(_previewView.mas_width).multipliedBy(16.0 / 9.0);
+        //        }];
     }
     [_delegate recordControlViewOnAspectChange];
 }
@@ -332,7 +331,7 @@ const static BOOL ShowDurationLabel = YES;
     }
     
     _lbDuration.hidden = YES;
-
+    
     _lbTip.hidden = NO;
     _btnExitRecord.hidden = NO;
     _btnCameraSwitch.hidden = NO;
@@ -353,7 +352,7 @@ const static BOOL ShowDurationLabel = YES;
     }
     
     _lbDuration.hidden = YES;
-
+    
     _lbTip.hidden = NO;
     _btnExitRecord.hidden = NO;
     _btnCameraSwitch.hidden = NO;
@@ -376,9 +375,9 @@ const static BOOL ShowDurationLabel = YES;
 - (void)setFlashState:(BOOL)flashState {
     _flashState = flashState;
     if (_flashState) {
-        [_btnFlash setImage:VideoRecorderBundleThemeImage(@"record_flash_open_img", @"flash_open") forState:UIControlStateNormal];
+        [_btnFlash setImage:VideoRecorderBundleThemeImage(@"flash_open") forState:UIControlStateNormal];
     } else {
-        [_btnFlash setImage:VideoRecorderBundleThemeImage(@"record_flash_close_img", @"flash_close") forState:UIControlStateNormal];
+        [_btnFlash setImage:VideoRecorderBundleThemeImage(@"flash_close") forState:UIControlStateNormal];
     }
     [_delegate recordControlViewOnFlashStateChange:_flashState];
 }

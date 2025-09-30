@@ -5,7 +5,7 @@
 #import "VideoRecorderConfig.h"
 #import "VideoRecorderCommon.h"
 
-#define DEFAULT_CONFIG_FILE @"config/default_config"
+#define DEFAULT_CONFIG_FILE @"default_config"
 
 @interface VideoRecorderConfig() {
     NSDictionary * _jsonDicFromConfigFile;
@@ -26,12 +26,17 @@
 
 - (instancetype)init{
     self = [super init];
-    NSBundle* assetsBundle = VideoRecorderCommon.assetsBundle;
-    if (assetsBundle == nil) {
+    NSBundle* modleNSBundle = VideoRecorderCommon.modleNSBundle;
+    if (modleNSBundle == nil) {
         return self;
     }
     
-    NSData *jsonData = [NSData dataWithContentsOfFile:[assetsBundle pathForResource:DEFAULT_CONFIG_FILE ofType:@"json"]];
+    NSData *jsonData = [NSData dataWithContentsOfFile:[modleNSBundle pathForResource:DEFAULT_CONFIG_FILE ofType:@"json"]];
+    if (jsonData == nil) {
+        return self;
+    }
+    NSLog(@"jsonData : %@" , jsonData);
+    
     NSError *err = nil;
     _jsonDicFromConfigFile = [NSJSONSerialization JSONObjectWithData:jsonData options:NSJSONReadingMutableContainers error:&err];
     if (err || ![_jsonDicFromConfigFile isKindOfClass:[NSDictionary class]]) {

@@ -7,18 +7,19 @@
 #import <Masonry/Masonry.h>
 
 #define FUNCTION_BUTTON_SIZE CGSizeMake(28, 28)
-#define BUTTON_SEND_SIZE CGSizeMake(60, 28)
-#define BUTTON_TOP    60
+#define BUTTON_SEND_SIZE CGSizeMake(72, 34)
 
 @interface VideoRecorderPreviewView() {
     NSString* _videoPath;
     AVPlayer* _player;
     UIImageView *_imgView;
     UIScreenEdgePanGestureRecognizer *_edgePanGesture;
+    UITapGestureRecognizer *_tapGesture;
     UIStackView *_stkViewButtons;
     UIButton *_btnSend;
     UIButton *_btnCancel;
     UIImage* _image;
+    UIView *_bottomBackground;
 }
 @end
 
@@ -42,6 +43,7 @@
     
     [self initFuncitonBtnStackView];
     [self initSendAndCancelBtn];
+    [self addBottomBackground];
 }
 
 -(void) play:(NSString*)videoPath {
@@ -52,7 +54,7 @@
     _videoPath = videoPath;
     _image = nil;
     
-    [self addEdgePanGesture];
+    [self addPanGesture];
     _imgView.hidden = YES;
     
     NSURL *url = [NSURL fileURLWithPath:videoPath];
@@ -68,9 +70,7 @@
                                               object:_player.currentItem];
     
     [_player play];
-    
-    [self bringSubviewToFront:_btnSend];
-    [self bringSubviewToFront:_btnCancel];
+    [self showOperationButton];
 }
 
 - (void) pause {
@@ -92,16 +92,19 @@
     _videoPath = nil;
     _image = image;
     
-    [self addEdgePanGesture];
+    [self addPanGesture];
     _imgView.image = image;
     float aspect = image.size.height * 1.0f / image.size.width;
     int imageViewHeight = self.frame.size.width * aspect;
-    int top = (self.frame.size.height - BUTTON_TOP - imageViewHeight) / 2;
+    int top = (self.frame.size.height - imageViewHeight) / 2;
     _imgView.frame = CGRectMake(0, top, self.frame.size.width, imageViewHeight);
     _imgView.hidden = NO;
     
-    [self bringSubviewToFront:_btnSend];
-    [self bringSubviewToFront:_btnCancel];
+    [_imgView mas_makeConstraints:^(MASConstraintMaker *make) {
+        make.top.equalTo(self).inset(top);
+    }];
+    
+    [self showOperationButton];
 }
 
 - (void)playerItemDidReachEnd:(NSNotification *)notification {
@@ -109,20 +112,37 @@
     [_player play];
 }
 
-- (void)removeEdgePanGesture {
+- (void)removePanGesture {
     if (_edgePanGesture) {
         [self removeGestureRecognizer:_edgePanGesture];
         _edgePanGesture = nil;
     }
+    
+    if (_tapGesture) {
+        [self removeGestureRecognizer:_tapGesture];
+        _tapGesture = nil;
+    }
 }
 
-- (void)addEdgePanGesture {
-    _edgePanGesture = [[UIScreenEdgePanGestureRecognizer alloc]
-                                                        initWithTarget:self
-                                                        action:@selector(handleEdgePanGesture:)];
-    _edgePanGesture.edges = UIRectEdgeLeft;
-    [self addGestureRecognizer:_edgePanGesture];
+- (void)addPanGesture {
+    if (_edgePanGesture == nil) {
+        _edgePanGesture = [[UIScreenEdgePanGestureRecognizer alloc]
+                                                            initWithTarget:self
+                                                            action:@selector(handleEdgePanGesture:)];
+        _edgePanGesture.edges = UIRectEdgeLeft;
+        [self addGestureRecognizer:_edgePanGesture];
+    }
+    
+    
+    if (_tapGesture == nil) {
+        _tapGesture = [[UITapGestureRecognizer alloc]
+                                                initWithTarget:self
+                                                action:@selector(handleTap:)];
+        [self addGestureRecognizer:_tapGesture];
+    }
+    
 }
+
 
 - (void)handleEdgePanGesture:(UIScreenEdgePanGestureRecognizer *)gesture {
     CGPoint translation = [gesture translationInView:self];
@@ -165,11 +185,32 @@
     _stkViewButtons.axis = UILayoutConstraintAxisHorizontal;
     _stkViewButtons.alignment = UIStackViewAlignmentCenter;
     _stkViewButtons.distribution = UIStackViewDistributionEqualSpacing;
+    
     [_stkViewButtons mas_makeConstraints:^(MASConstraintMaker *make) {
         make.left.right.equalTo(self).inset(10);
         make.bottom.equalTo(self.mas_safeAreaLayoutGuideBottom);
         make.height.mas_equalTo(FUNCTION_BUTTON_SIZE.height);
     }];
+}
+
+- (void)addBottomBackground {
+    _bottomBackground = [[UIView alloc] init];
+    _bottomBackground.backgroundColor = [UIColor colorWithRed:0.0 green:0.0 blue:0.0 alpha:0.05];
+    _bottomBackground.translatesAutoresizingMaskIntoConstraints = NO;
+    _bottomBackground.layer.cornerRadius = 8;
+    [self addSubview:_bottomBackground];
+    [NSLayoutConstraint activateConstraints:@[
+            [_bottomBackground.heightAnchor constraintEqualToConstant:100],
+            [_bottomBackground.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+            [_bottomBackground.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [_bottomBackground.trailingAnchor constraintEqualToAnchor:self.trailingAnchor]
+        ]];
+}
+
+- (void)handleTap:(UITapGestureRecognizer *)sender {
+    _btnSend.hidden = !_btnSend.isHidden;
+    _btnCancel.hidden = !_btnCancel.isHidden;
+    _bottomBackground.hidden = !_bottomBackground.hidden;
 }
 
 - (void) initSendAndCancelBtn {
@@ -181,7 +222,7 @@
         [_btnSend mas_makeConstraints:^(MASConstraintMaker *make) {
             make.size.mas_equalTo(BUTTON_SEND_SIZE);
             make.right.equalTo(self).inset(20);
-            make.bottom.equalTo(self.mas_safeAreaLayoutGuideBottom);
+            make.bottom.equalTo(self).inset(25);
         }];
     } else {
         [_stkViewButtons addArrangedSubview:_btnSend];
@@ -197,10 +238,9 @@
     [_btnSend setTitle:titile forState:UIControlStateNormal];
     [_btnSend addTarget:self action:@selector(onBtnSendClicked) forControlEvents:UIControlEventTouchUpInside];
     
-    
     _btnCancel = [UIButton buttonWithType:UIButtonTypeCustom];
     [self addSubview:_btnCancel];
-    [_btnCancel setImage:VideoRecorderBundleThemeImage(@"editor_cancel_img", @"return_arrow") forState:UIControlStateNormal];
+    [_btnCancel setImage:VideoRecorderBundleThemeImage(@"return_arrow") forState:UIControlStateNormal];
     [_btnCancel addTarget:self action:@selector(onBtnCancelClicked) forControlEvents:UIControlEventTouchUpInside];
     [_btnCancel mas_makeConstraints:^(MASConstraintMaker *make) {
         make.size.mas_equalTo(CGSizeMake(24, 24));
@@ -222,12 +262,21 @@
 }
 
 - (void) quit : (BOOL) accept{
-    [self removeEdgePanGesture];
+    [self removePanGesture];
     self.transform = CGAffineTransformIdentity;
     [self cleanupPlayer];
     if (_delegate) {
         accept ? [_delegate previewAccept:_videoPath image:_image] : [_delegate previewCancel];
     }
+}
+
+-(void)showOperationButton {
+    [self bringSubviewToFront:_bottomBackground];
+    [self bringSubviewToFront:_btnSend];
+    [self bringSubviewToFront:_btnCancel];
+    _btnSend.hidden = FALSE;
+    _btnCancel.hidden = FALSE;
+    _bottomBackground.hidden = FALSE;
 }
 
 - (void)cleanupPlayer {

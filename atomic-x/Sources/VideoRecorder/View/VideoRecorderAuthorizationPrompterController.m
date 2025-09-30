@@ -61,8 +61,8 @@
     _confirmButton = [UIButton buttonWithType:UIButtonTypeSystem];
     [_confirmButton setTitle:[VideoRecorderCommon localizedStringForKey:@"ok"] forState:UIControlStateNormal];
     [_confirmButton addTarget:self
-                      action:@selector(confirmAction)
-            forControlEvents:UIControlEventTouchUpInside];
+                       action:@selector(confirmAction)
+             forControlEvents:UIControlEventTouchUpInside];
     _confirmButton.titleLabel.font = [UIFont systemFontOfSize:16];
     
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[
@@ -79,7 +79,7 @@
         [container.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [container.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [container.widthAnchor constraintEqualToAnchor:self.view.widthAnchor
-                                           multiplier:0.8],
+                                            multiplier:0.8],
         
         [stack.topAnchor constraintEqualToAnchor:container.topAnchor constant:20],
         [stack.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:20],

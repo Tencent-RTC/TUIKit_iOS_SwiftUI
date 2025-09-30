@@ -37,6 +37,7 @@ struct VideoRecorderViewWrapper: UIViewControllerRepresentable {
         }
     
         videoRecorderControll.resultCallback = recordVCEditCallback
+        videoRecorderControll.recordFilePath = createRecordedFilePath(messageType: .video, withExtension: "mov")
         return videoRecorderControll
     }
     
@@ -44,13 +45,19 @@ struct VideoRecorderViewWrapper: UIViewControllerRepresentable {
         
         if let imageData = image.jpegData(compressionQuality: 0.8)
         {
-            let uuid = "\(Int(Date().timeIntervalSince1970))_\(arc4random() % 1000)"
-            let path = NSHomeDirectory() + "/Documents/com_tencent_imsdk_data/image/" + uuid + ".png"
+            let path = createRecordedFilePath(messageType: .image, withExtension: "png")
             let fileURL = URL(fileURLWithPath: path)
             try? imageData.write(to: fileURL)
             return fileURL
         }
         return nil
+    }
+    
+    private func createRecordedFilePath(messageType: MessageType, withExtension: String?)->String {
+        let path = ChatUtil.generateMediaPath(messageType: messageType, withExtension: withExtension)
+        let directory = (path as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: nil)
+        return path
     }
     
     func buildConfigJSON(from config: VideoRecorderConfigBuilder?) -> String? {
