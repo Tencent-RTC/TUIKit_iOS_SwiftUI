@@ -25,15 +25,15 @@
     VideoRecorderControlView *_ctrlView;
     VideoRecorderPreviewView *_videoPlayerView;
     UIScreenEdgePanGestureRecognizer *_edgePanGesture;
-    BOOL _originNavgationBarHidden;
-    float _recordDuration;
-    CGFloat _zoom;
+    VideoRecordResult* _recorderResult;
     VideoRecorderEncodeConfig* _encodeConfig;
+    CGFloat _zoom;
+    BOOL _originNavgationBarHidden;
     BOOL _recordForEdit;
+    BOOL _isUsingFrontCamera;
+    float _recordDuration;
     float _minDurationSeconds;
     float _maxDurationSeconds;
-    VideoRecordResult* _recorderResult;
-    BOOL _isUsingFrontCamera;
 }
 
 @end
@@ -214,19 +214,12 @@
 
 - (void)recordControlViewOnRecordStart {
     _recordCore.recordDelegate = self;
-    int res = [_recordCore startRecord:[self generateVideoPath]];
+    int res = [_recordCore startRecord:_recordFilePath];
     NSLog(@"record start. res = %d", res);
     if (res == -5) {
         [VideoRecorderAuthorizationPrompterController showPrompterDialogInViewController:self prompType:NoSignature];
     }
     return;
-}
-
-- (NSString*)generateVideoPath {
-    NSTimeInterval timestamp = [[NSDate date] timeIntervalSince1970];
-    uint32_t randomNumber = arc4random_uniform(1000000);
-    NSString *uuid = [NSString stringWithFormat:@"%.0f_%u", timestamp, randomNumber];
-    return [NSString stringWithFormat:@"%@%@%@%@",NSHomeDirectory(), @"/Documents/com_tencent_imsdk_data/video/",uuid, @".mov"];
 }
 
 - (void)recordControlViewOnRecordFinish {

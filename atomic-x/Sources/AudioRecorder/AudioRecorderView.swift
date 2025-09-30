@@ -2,6 +2,8 @@ import AVFoundation
 import AVKit
 import SwiftUI
 
+// To use AI noise reduction, the app must depend on TXLiteAVSDK_Professional v12.7+ and have the feature enabled.
+// For enabling permissions, see documentation: https://cloud.tencent.com/document/product/269/113290
 public struct AudioRecorderView: View {
     @StateObject private var recorder = AudioRecorder.shared
     @Binding var shouldCancelRecording: Bool

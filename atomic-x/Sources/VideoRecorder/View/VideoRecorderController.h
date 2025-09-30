@@ -8,6 +8,7 @@ NS_ASSUME_NONNULL_BEGIN
 typedef void (^VideoRecorderRecordResultCallback)(NSString *_Nullable videoPath, UIImage *_Nullable image);
 
 @interface VideoRecorderController : UIViewController
+@property(nullable, nonatomic, strong) NSString* recordFilePath;
 @property(nullable, nonatomic) VideoRecorderRecordResultCallback resultCallback;
 - (instancetype)init;
 @end

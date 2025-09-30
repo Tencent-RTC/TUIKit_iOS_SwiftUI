@@ -28,8 +28,8 @@
     NSString *nameKey = [NSString stringWithFormat:@"filter_%@", filterName];
     NSString *name = [VideoRecorderCommon localizedStringForKey:nameKey];
 
-    NSString *iconImageName = [NSString stringWithFormat:@"filter/icon/%@", filterName];
-    NSString *filterMapImageName = [NSString stringWithFormat:@"filter/map/%@", filterName];
+    NSString *iconImageName = [NSString stringWithFormat:@"icon_%@", filterName];
+    NSString *filterMapImageName = [NSString stringWithFormat:@"filter_%@", filterName];
     VideoRecorderBeautifyEffectItem *item = [[VideoRecorderBeautifyEffectItem alloc] initWithName:name iconImage:[VideoRecorderCommon bundleImageByName:iconImageName] strength:DEFAULT_FILTER_EFFECT_STRENGTH];
     item.filterMapImage = [VideoRecorderCommon bundleImageByName:filterMapImageName];
     return item;
@@ -59,12 +59,12 @@
 
 + (NSArray<VideoRecorderBeautifyEffectItem *> *)defaultBeautifyEffects {
     return @[
-        [VideoRecorderBeautifyEffectItem newWithName:[VideoRecorderCommon localizedStringForKey:@"beautify_none"] iconImageName:@"beauty/none" tag:VideoRecorderEffectItemTagNone],
-        [VideoRecorderBeautifyEffectItem newWithName:[VideoRecorderCommon localizedStringForKey:@"beautify_smooth"] iconImageName:@"beauty/smooth" tag:VideoRecorderEffectItemTagSmooth],
+        [VideoRecorderBeautifyEffectItem newWithName:[VideoRecorderCommon localizedStringForKey:@"beautify_none"] iconImageName:@"none" tag:VideoRecorderEffectItemTagNone],
+        [VideoRecorderBeautifyEffectItem newWithName:[VideoRecorderCommon localizedStringForKey:@"beautify_smooth"] iconImageName:@"smooth" tag:VideoRecorderEffectItemTagSmooth],
         [VideoRecorderBeautifyEffectItem newWithName:[VideoRecorderCommon localizedStringForKey:@"beautify_whitness"]
-                        iconImageName:@"beauty/whitness"
+                        iconImageName:@"whitness"
                                   tag:VideoRecorderEffectItemTagWhiteness],
-        [VideoRecorderBeautifyEffectItem newWithName:[VideoRecorderCommon localizedStringForKey:@"beautify_ruddy"] iconImageName:@"beauty/ruddy" tag:VideoRecorderEffectItemTagRuddy],
+        [VideoRecorderBeautifyEffectItem newWithName:[VideoRecorderCommon localizedStringForKey:@"beautify_ruddy"] iconImageName:@"ruddy" tag:VideoRecorderEffectItemTagRuddy],
     ];
 }
 

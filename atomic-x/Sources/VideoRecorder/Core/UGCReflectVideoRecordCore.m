@@ -82,7 +82,13 @@
 }
 
 - (int)startRecord:(NSString*) path {
-    NSString* coverPath = @"";
+    if (path == nil) {
+        return -1;
+    }
+    
+    NSString *withoutExtension = [path stringByDeletingPathExtension];
+    NSString* coverPath = [withoutExtension stringByAppendingPathExtension:@"jpg"];
+    
     id ret = [ReflectUtil invokeMethod:_txUGCRecorderInstance methodName:@"startRecord:coverPath:" withArguments:@[path,coverPath]];
     return (ret == nil) ? -1 : [ret intValue];
 }

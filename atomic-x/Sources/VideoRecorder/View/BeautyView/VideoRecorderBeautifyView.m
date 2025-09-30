@@ -64,7 +64,7 @@
 
     _imgViewCompare = [[UIImageView alloc] init];
     [_topPanel addSubview:_imgViewCompare];
-    _imgViewCompare.image = VideoRecorderBundleThemeImage(@"beautify_effect_compare_img", @"effect_compare");
+    _imgViewCompare.image = VideoRecorderBundleThemeImage(@"effect_compare");
 
     UIColor* themeColor = [[VideoRecorderConfig sharedInstance] getThemeColor];
     _slider = [[UISlider alloc] init];
@@ -207,7 +207,7 @@
 - (void)initUI {
     _imgView = [[UIImageView alloc] init];
     [self addSubview:_imgView];
-    _imgView.image = VideoRecorderBundleThemeImage(@"beautify_marker_img", @"marker");
+    _imgView.image = VideoRecorderBundleThemeImage(@"marker");
     [_imgView mas_makeConstraints:^(MASConstraintMaker *make) {
       make.edges.equalTo(self);
     }];

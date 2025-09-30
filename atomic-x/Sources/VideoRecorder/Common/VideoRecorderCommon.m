@@ -81,10 +81,10 @@
 }
 
 + (UIImage *)bundleImageByName:(NSString *)name {
-    if (self.assetsBundle == nil) {
+    if (self.modleNSBundle == nil) {
         return nil;
     }
-    return [UIImage imageNamed:name inBundle:self.assetsBundle compatibleWithTraitCollection:nil];
+    return [UIImage imageNamed:name inBundle:self.modleNSBundle compatibleWithTraitCollection:nil];
 }
 
 + (UIImage *)bundleRawImageByName:(NSString *)name {
@@ -141,14 +141,13 @@
     return url;
 }
 
-// todo 这里先不管Theme，直接从image取图片
 + (UIImage *__nullable)dynamicImage:(NSString *)imageKey defaultImageName:(NSString *)image {
-    if (VideoRecorderCommon.assetsBundle == nil) {
+    if (VideoRecorderCommon.modleNSBundle == nil) {
         return nil;
     }
     
-    NSString* imageBundlePath = [VideoRecorderCommon.assetsBundle pathForResource:image ofType:@"png"];
-    return [UIImage imageWithContentsOfFile:imageBundlePath];
+    
+    return [UIImage imageNamed:image inBundle:VideoRecorderCommon.modleNSBundle compatibleWithTraitCollection:nil];
 }
 
 + (UIColor *)dynamicColor:(NSString *)colorKey  defaultColor:(NSString *)hex {
@@ -192,9 +191,6 @@
 }
 
 + (NSString *)getPreferredLanguage {
-    // Custom language in app
-    // todo:eddard 需要处理用户设置语言
-    
     NSString* gCustomLanguage = [NSUserDefaults.standardUserDefaults objectForKey:ChatEngineLanguageKey];
     if (gCustomLanguage != nil && gCustomLanguage.length > 0) {
         return gCustomLanguage;
