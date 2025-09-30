@@ -191,12 +191,14 @@ public struct AZOrderedList: View {
                         }
                     }
                     .onAppear {
-                        if groupedUsers.isEmpty {
-                            DispatchQueue.main.async { processUserList() }
+                        DispatchQueue.main.async {
+                            processUserList()
                         }
                     }
-                    .onChange(of: userList) { _ in
-                        processUserList()
+                    .onChange(of: userList) { newUserList in
+                        DispatchQueue.main.async {
+                            self.processUserListWithData(newUserList)
+                        }
                     }
                     .onChange(of: scrollTarget) { target in
                         if let target = target {
@@ -283,17 +285,18 @@ public struct AZOrderedList: View {
     }
 
     private func processUserList() {
-        print("UserList: processUserList called with \(userList.count) users")
-        
-        let currentUserListHash = userList.map { "\($0.id)-\($0.title ?? "")" }.joined(separator: ",")
+        processUserListWithData(userList)
+    }
+
+    private func processUserListWithData(_ users: [AZOrderedListItem]) {
+        let currentUserListHash = users.map { "\($0.id)-\($0.title ?? "")" }.joined(separator: ",")
         let currentGroupedHash = groupedUsers.flatMap { $0.users }.map { "\($0.id)-\($0.title ?? "")" }.joined(separator: ",")
-        
+
         if currentUserListHash == currentGroupedHash && !groupedUsers.isEmpty {
-            print("UserList: Data unchanged, skipping processing")
             return
         }
-        
-        let sortedUsers = userList.sorted { user1, user2 in
+
+        let sortedUsers = users.sorted { user1, user2 in
             let title1 = user1.title ?? user1.id
             let title2 = user2.title ?? user2.id
             return title1.localizedCaseInsensitiveCompare(title2) == .orderedAscending
@@ -315,11 +318,9 @@ public struct AZOrderedList: View {
         let newGroupedUsers = sortedSections.map { sectionTitle in
             GroupedAZOrderedListItem(sectionTitle: sectionTitle, users: groupedDict[sectionTitle] ?? [])
         }
-        print("UserList: Created \(newGroupedUsers.count) groups with \(sortedSections.count) sections")
-        
-        self.groupedUsers = newGroupedUsers
-        self.sectionTitles = sortedSections
-        print("UserList: State updated - groupedUsers: \(self.groupedUsers.count), sectionTitles: \(self.sectionTitles.count)")
+
+        groupedUsers = newGroupedUsers
+        sectionTitles = sortedSections
     }
 
     private func getFirstCharacter(_ text: String) -> String {
