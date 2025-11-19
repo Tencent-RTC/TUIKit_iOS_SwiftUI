@@ -5,8 +5,9 @@
   Created by eddardliu on 2024/11/18.
   
 */
-"record_tip" = "輕觸拍照，長按錄製";
-"record_photo_tip" = "點擊拍照";
+"record_mode_mix_tip" = "輕觸拍照，長按錄製";
+"record_mode_photo_tip" = "點擊拍照";
+"record_mode_video_tip" = "長按錄製";
 
 "flash" = "閃光燈";
 "aspect" = "屏比";
@@ -80,5 +81,5 @@
 
 "authorization_prompter_no_signature" = "由於您未開通多媒體挿件使用許可權，您當前功能將受限，您可以在CONFIG中遮罩相關功能，也可以開通多媒體挿件許可權繼續使用該功能，詳情請閱讀模塊下的READ.ME檔案";
 "authorization_prompter_no_liteav_sdk" = "由於您的工程配寘，您當前功能將受限，您可以在CONFIG中遮罩相關功能，也可以更改您的工程配寘繼續使用該功能，詳情請閱讀模塊下的READ.ME檔案";
-"prompter" = "提示";
+"prompter" = "Debug版本提示";
 "link_error" = "無法打開連結";

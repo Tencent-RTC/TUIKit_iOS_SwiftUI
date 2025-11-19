@@ -6,8 +6,10 @@
   
 */
 
-"record_tip" = "轻触拍照，长按录制";
-"record_photo_tip" = "点击拍照";
+"record_mode_mix_tip" = "轻触拍照，长按录制";
+"record_mode_photo_tip" = "点击拍照";
+"record_mode_video_tip" = "长按录制";
+
 
 "flash" = "闪光灯";
 "aspect" = "屏比";
@@ -85,5 +87,5 @@
     "由于您未开通多媒体插件使用权限，您当前功能将受限, 您可以在CONFIG中屏蔽相关功能，也可以开通多媒体插件权限继续使用该功能，详情请阅读模块下的READ.ME文件";
 "authorization_prompter_no_liteav_sdk" = "由于您的工程配置，您当前功能将受限，您可以在CONFIG中屏蔽相关功能，也可以更改您的工程配置继续使用该功能，详情请阅读模块下的READ.ME文件";
 
-"prompter" = "提示";
+"prompter" = "Debug版本提示";
 "link_error" = "无法打开链接";

@@ -8,7 +8,7 @@ internal struct AudioRecorderListener {
 }
 
 internal protocol AudioRecorderInternalProtocol: AnyObject {
-    func startRecord(_ path : String)
+    func startRecord(_ path : String, _ minDuration: Int, _ maxDuration: Int)
     func stopRecord()
     func setListener(_ listener: AudioRecorderListener)
     func enableAIDeNoise(_ enable : Bool)

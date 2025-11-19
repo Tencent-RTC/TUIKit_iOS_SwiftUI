@@ -33,8 +33,7 @@ public class MessageListHelper {
         } else {
             if isRecalledBySelf {
                 str = LocalizedChatString("MessageTipsYouRecallMessage")
-            }
-            else {
+            } else {
                 str = LocalizedChatString("MessageTipsOthersRecallMessage")
             }
         }
@@ -71,7 +70,7 @@ public class MessageListHelper {
             
         case .muteGroupMember(_, _, let isSelfMuted, let mutedGroupMembersShowName, let muteTime):
             let actualShowName = isSelfMuted ? LocalizedChatString("You") : mutedGroupMembersShowName
-            return "\(actualShowName)\(muteTime == 0 ? LocalizedChatString("MessageTipsUnMute") : LocalizedChatString("MessageTipsMute"))"
+            return "\(actualShowName)\(muteTime == 0 ? LocalizedChatString("MessageTipsUnmute") : LocalizedChatString("MessageTipsMute"))"
             
         case .pinGroupMessage(_, let pinGroupMessageOperator):
             return String(format: LocalizedChatString("MessageTipsGroupPinMessage"), pinGroupMessageOperator)

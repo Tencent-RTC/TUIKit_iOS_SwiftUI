@@ -4,6 +4,8 @@
 #import "VideoRecorderAuthorizationPrompterController.h"
 #import <SafariServices/SafariServices.h>
 #import "VideoRecorderCommon.h"
+#import "VideoRecordSignatureChecker.h"
+#import "UGCReflectVideoRecordCore.h"
 
 #define IM_MULTIMEDIA_PLUGIN_DOCUMENT_URL @"https://cloud.tencent.com/document/product/269/113290"
 
@@ -17,7 +19,19 @@
 
 @implementation VideoRecorderAuthorizationPrompterController
 
++ (Boolean) isHasSignature {
+    return [[VideoRecordSignatureChecker shareInstance] getSetSignatureResult] == VIDEO_RECORD_SIGNATURE_SUCCESS;
+}
+
++ (Boolean) isHasLiteavProSdk {
+    return  [[UGCReflectVideoRecordCore alloc] init] != nil;
+}
+
 + (void)showPrompterDialogInViewController:(UIViewController *)presentingVC prompType:(AuthorizationPrompterType) prompType{
+#ifndef DEBUG
+    return;
+#endif
+    
     VideoRecorderAuthorizationPrompterController *dialog = [[VideoRecorderAuthorizationPrompterController alloc] init];
     dialog.modalPresentationStyle = UIModalPresentationOverCurrentContext;
     dialog.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;

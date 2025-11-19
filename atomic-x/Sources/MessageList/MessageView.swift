@@ -7,7 +7,7 @@ import SwiftUI
 struct MessageView: View {
     @EnvironmentObject private var menuManager: MessageMenuManager
     @EnvironmentObject var themeState: ThemeState
-    @Environment(\.MessageListConfigProtocol) var style: MessageListConfigProtocol
+    @Environment(\.messageListConfigProtocol) var config: MessageListConfigProtocol
     @Environment(\.locateMessageID) private var locateMessageID: String?
     @StateObject private var imageViewerManager: ImageViewerManager
     @State private var isShowingEditView = false
@@ -17,7 +17,7 @@ struct MessageView: View {
     @State private var messageInputStore: MessageInputStore?
     let message: MessageInfo
     let onUserClick: ((String) -> Void)?
-    let parentMessageList: [MessageInfo]  
+    let parentMessageList: [MessageInfo]
     private var messageListStore: MessageListStore
     private var audioPlayer: AudioPlayer
 
@@ -27,7 +27,7 @@ struct MessageView: View {
     }
 
     var isLeft: Bool {
-        switch style.alignment {
+        switch config.alignment {
         case 1:
             return true
         case 2:
@@ -42,7 +42,7 @@ struct MessageView: View {
         self.messageListStore = messageListStore
         self.onUserClick = onUserClick
         self.audioPlayer = audioPlayer
-        self.parentMessageList = parentMessageList  
+        self.parentMessageList = parentMessageList
         self._messageInputStore = State(initialValue: nil)
         self._imageViewerManager = StateObject(wrappedValue: ImageViewerManager(
             conversationID: conversationID,
@@ -57,17 +57,16 @@ struct MessageView: View {
                 longPressed: $longPressed,
                 menuManager: menuManager,
                 message: message,
-                style: style
+                style: config
             ))
             .fullScreenCover(isPresented: $imageViewerManager.isShowingImageViewer) {
                 imageViewerManager.imageViewerContent()
             }
-
     }
 
     @ViewBuilder
     private var mainContent: some View {
-        VStack(spacing: 0) {  
+        VStack(spacing: 0) {
             timeDisplayView
             contentView
         }
@@ -75,7 +74,7 @@ struct MessageView: View {
 
     @ViewBuilder
     private var timeDisplayView: some View {
-        if let timeString = getTimeString(), style.isShowTimeMessage {
+        if let timeString = getTimeString(), config.isShowTimeMessage {
             HStack {
                 Spacer()
                 Text(timeString)
@@ -129,27 +128,28 @@ struct MessageView: View {
         Group {
             if isLeft {
                 HStack(alignment: .top, spacing: 0) {
-                    userAvatar(isShow: style.isShowLeftAvatar, isRight: false)
+                    userAvatar(isShow: config.isShowLeftAvatar, isRight: false)
                     HStack(alignment: .top, spacing: 0) {
-                        if style.isShowLeftNickname, let sender = message.sender, !sender.isEmpty {
+                        if config.isShowLeftNickname, let sender = message.sender, !sender.isEmpty {
                             nicknameView(sender: sender)
                         }
                         messageContent(alignment: .leading)
                     }
+                    Spacer(minLength: config.horizontalPadding)
                 }
             } else {
                 HStack(alignment: .top, spacing: 0) {
-                    if style.isShowRightNickname && message.sender?.count != 0 {
+                    Spacer(minLength: config.horizontalPadding)
+                    if config.isShowRightNickname && message.sender?.count != 0 {
                         nicknameView(sender: message.sender!)
                     }
-                    Spacer(minLength: 0)
                     messageContent(alignment: .trailing)
-                    userAvatar(isShow: style.isShowRightAvatar, isRight: true)
+                    userAvatar(isShow: config.isShowRightAvatar, isRight: true)
                 }
             }
         }
-        .padding(4)
-        .background(messageWrapperBackground)
+        .padding(.horizontal, config.horizontalPadding)
+        .padding(.vertical, 4)
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: isLeft ? .leading : .trailing)
     }
@@ -159,7 +159,7 @@ struct MessageView: View {
             if isShow {
                 Avatar(url: message.rawMessage?.faceURL, name: message.rawMessage?.nickName)
                     .frame(width: 36, height: 36)
-                    .padding(isRight ? .leading : .trailing, 8)
+                    .padding(isRight ? .leading : .trailing, config.avatarSpacing)
                     .contentShape(Rectangle())
                     .scaleEffect(message.isSelf ? 1.0 : 1.0)
                     .onTapGesture {
@@ -173,14 +173,12 @@ struct MessageView: View {
 
     private func nicknameView(sender: String) -> some View {
         Text("\(sender):")
-            .font(style.nicknameFont)
-            .foregroundColor(style.nicknameTextColor)
-            .background(style.nicknameBackgroundColor)
+            .foregroundColor(themeState.colors.textColorPrimary)
             .padding(.leading, 2)
             .padding(.top, 8)
             .fixedSize(horizontal: true, vertical: false)
     }
-    
+
     private var sendFailIcon: some View {
         Image(systemName: "exclamationmark.circle.fill")
             .font(.system(size: 16))
@@ -199,7 +197,7 @@ struct MessageView: View {
                 )
             }
     }
-    
+
     private var sendingLoadingIcon: some View {
         ProgressView()
             .progressViewStyle(CircularProgressViewStyle(tint: themeState.colors.textColorSecondary))
@@ -215,14 +213,14 @@ struct MessageView: View {
                 } else if message.isSelf && message.status == .sending {
                     sendingLoadingIcon
                 }
-                
+
                 VStack(alignment: message.isSelf ? .trailing : .leading, spacing: 4) {
                     messageContentBody
                         .opacity(message.status == .sending ? 0.7 : 1.0)
                 }
                 .scaleEffect(longPressed ? 0.97 : 1.0)
                 .animation(.spring(response: 0.3), value: longPressed)
-                
+
                 if !message.isSelf && message.status == .sendFail {
                     sendFailIcon
                 } else if !message.isSelf && message.status == .sending {
@@ -233,17 +231,8 @@ struct MessageView: View {
         .fixedSize(horizontal: false, vertical: true)
     }
 
-    private var messageWrapperBackground: some View {
-        RoundedRectangle(cornerRadius: style.bottomViewCornerRadius)
-            .fill(style.bottomViewBackgroundColor)
-            .overlay(
-                RoundedRectangle(cornerRadius: style.bottomViewCornerRadius)
-                    .stroke(style.bottomViewBorderColor, lineWidth: style.bottomViewBorderWidth)
-            )
-    }
-
     private func systemMessageView(_ messageBody: MessageBody) -> some View {
-        guard let systemInfo = messageBody.systemMessage, style.isShowSystemMessage else {
+        guard let systemInfo = messageBody.systemMessage, config.isShowSystemMessage else {
             return AnyView(EmptyView())
         }
         return AnyView(
@@ -271,7 +260,7 @@ struct MessageView: View {
     }
 
     private func customSystemMessageView(_ messageBody: MessageBody) -> some View {
-        if style.isShowSystemMessage == false {
+        if config.isShowSystemMessage == false {
             return AnyView(EmptyView())
         }
         return AnyView(
@@ -376,7 +365,7 @@ struct MessageView: View {
                         audioPlayer: audioPlayer
                     )
                 default:
-                    if style.isShowUnsupportMessage {
+                    if config.isShowUnsupportMessage {
                         Text(LocalizedChatString("NotSupportThisMessage"))
                             .font(.system(size: 14))
                             .padding(12)
@@ -400,15 +389,12 @@ struct MessageView: View {
             }
         )
     }
-    
+
     private func resendMessage(_ messageToResend: MessageInfo) {
         guard messageToResend.messageBody != nil else { return }
-        
-        var resendMessage = messageToResend
-        
-        self.messageInputStore = MessageInputStore.create(conversationID: self.messageListStore.conversationID)
-        
-        self.messageInputStore?.sendMessage(resendMessage) {  result in
+        let resendMessage = messageToResend
+        messageInputStore = MessageInputStore.create(conversationID: messageListStore.conversationID)
+        messageInputStore?.sendMessage(resendMessage) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:

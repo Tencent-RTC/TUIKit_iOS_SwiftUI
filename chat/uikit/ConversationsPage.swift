@@ -26,12 +26,12 @@ public struct ConversationsPage: View {
     @State private var showChatsMenu = false
     @State var friendList: [ContactInfo] = []
 
-    var onShowMessage: ((NavigationInfo) -> Void)?
+    var onConversationClick: ((NavigationInfo) -> Void)?
     private var contactListStore: ContactListStore
 
-    public init(onShowMessage: ((NavigationInfo) -> Void)? = nil) {
+    public init(onConversationClick: ((NavigationInfo) -> Void)? = nil) {
         self.contactListStore = ContactListStore.create()
-        self.onShowMessage = onShowMessage
+        self.onConversationClick = onConversationClick
     }
 
     public var body: some View {
@@ -39,7 +39,7 @@ public struct ConversationsPage: View {
             headerView
             ConversationList(
                 onConversationClick: { conversation in
-                    onShowMessage?(NavigationInfo(conversation: conversation))
+                    onConversationClick?(NavigationInfo(conversation: conversation))
                 }
             )
             .environmentObject(themeState)
@@ -65,7 +65,7 @@ public struct ConversationsPage: View {
                 onUserSelected: { user in
                     showStartConversation = false
                     let conversation = createConversationFromUser(user)
-                    onShowMessage?(NavigationInfo(conversation: conversation))
+                    onConversationClick?(NavigationInfo(conversation: conversation))
                 }
             )
         }
@@ -87,15 +87,16 @@ public struct ConversationsPage: View {
                 contactListStore: contactListStore,
                 onComplete: { createdGroupID, groupName, conversationId in
                     showConfigSheet = false
-                    if let groupID = createdGroupID, 
+                    if let groupID = createdGroupID,
                        let name = groupName,
-                       let convId = conversationId {
+                       let convId = conversationId
+                    {
                         let conversation = createConversationFromGroupInfo(
                             groupID: groupID,
                             groupName: name,
                             conversationId: convId
                         )
-                        onShowMessage?(NavigationInfo(conversation: conversation))
+                        onConversationClick?(NavigationInfo(conversation: conversation))
                     }
                 },
                 onBack: {
@@ -155,6 +156,7 @@ public struct ConversationsPage: View {
         conversation.avatarURL = nil
         return conversation
     }
+
     private func createConversationFromGroupInfo(groupID: String, groupName: String, conversationId: String) -> ConversationInfo {
         var conversation = ConversationInfo(conversationID: conversationId)
         conversation.type = .group
@@ -191,7 +193,7 @@ struct ChatsMenuOverlay: View {
                                     showChatsMenu = false
                                     showUserPicker = true
                                 }
-                            )
+                            ),
                         ])
                         .padding(.trailing, 16)
                         .padding(.top, 50)
@@ -251,10 +253,10 @@ struct StartConversationSheet: View {
             }
         }
     }
-    
+
     private func loadFriendList() {
         isLoading = true
-        
+
         let currentFriendList = contactListStore.state.value.friendList
         if !currentFriendList.isEmpty {
             DispatchQueue.main.async {
@@ -262,7 +264,7 @@ struct StartConversationSheet: View {
                 self.isLoading = false
             }
         }
-        
+
         contactListStore.fetchFriendList(completion: { result in
             DispatchQueue.main.async {
                 switch result {
@@ -275,7 +277,7 @@ struct StartConversationSheet: View {
             }
         })
     }
-    
+
     private var orderedListItems: [AZOrderedListItem] {
         return friendList.map { contact in
             AZOrderedListItem(
@@ -285,17 +287,17 @@ struct StartConversationSheet: View {
             )
         }
     }
-    
 }
 
 // MARK: - UserPickerSheet
+
 struct UserPickerSheet: View {
     let contactListStore: ContactListStore
     @ObservedObject var selectedUsersContainer: SelectedUsersContainer
     @Binding var showUserPicker: Bool
     @Binding var showConfigSheet: Bool
     @State private var friendList: [ContactInfo] = []
-    
+
     var body: some View {
         NavigationView {
             UserPicker(
@@ -312,14 +314,14 @@ struct UserPickerSheet: View {
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
-            contactListStore.fetchFriendList(completion: { result in
+            contactListStore.fetchFriendList(completion: { _ in
             })
         }
         .onReceive(contactListStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.friendList))) { newFriendList in
             self.friendList = newFriendList
         }
     }
-    
+
     // Computed property that always reflects current friendList state
     private var userPickerItems: [UserPickerItem] {
         let items = friendList.map { contact in
@@ -332,4 +334,3 @@ struct UserPickerSheet: View {
         return items
     }
 }
-

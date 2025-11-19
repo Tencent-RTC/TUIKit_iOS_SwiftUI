@@ -30,7 +30,10 @@
           [invocation setSelector:shareSelector];
           [invocation setTarget:txClass];
           [invocation invoke];
-          [invocation getReturnValue:&_txUGCRecorderInstance];
+          
+          __unsafe_unretained id temp = nil;
+          [invocation getReturnValue:&temp];
+         _txUGCRecorderInstance = temp;
       }
   }
     return _txUGCRecorderInstance ? self : nil;

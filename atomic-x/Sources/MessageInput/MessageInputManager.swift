@@ -10,10 +10,11 @@ class MessageInputManager {
     init(messageInputStore: MessageInputStore) {
         self.messageInputStore = messageInputStore
     }
+
     var toastInstance: Toast {
         return toast
     }
-    
+
     // MARK: - Text Message
 
     func sendTextMessage(_ text: String) {
@@ -100,9 +101,9 @@ class MessageInputManager {
             self?.handleSendResult(result)
         })
     }
-    
+
     // MARK: - Private Methods
-    
+
     private func handleSendResult(_ result: Result<Void, ErrorInfo>) {
         switch result {
         case .success:

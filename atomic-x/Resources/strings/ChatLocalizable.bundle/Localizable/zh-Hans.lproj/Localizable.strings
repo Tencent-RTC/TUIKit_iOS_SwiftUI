@@ -745,7 +745,9 @@
 "QuickReplyThanks" = "谢谢！";
 "QuickReplyReceived" = "收到";
 "QuickReplyProcessing" = "正在处理中";
-"VoiceRecordTimeLimitReached" = "语音录制时长达到上限";
+"AudioRecordTimeLimitReached" = "语音录制时长达到上限";
+"AudioRecorderLessThanMinTime" = "语音录制时长太短";
+"AudioAuthorizationPrompter" = "当前配置不能开启AI降噪.仅Debug版本有该提示";
 "ChooseMediaType" = "选择媒体类型";
 "SendMessage" = "Send a message";
 "AudioDownloadFailed" = "下载语音消息失败";

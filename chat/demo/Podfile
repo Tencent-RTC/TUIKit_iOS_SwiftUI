@@ -5,9 +5,9 @@ target 'ChatDemo' do
   
   pod 'AtomicX/Chat', :path => '../../atomic-x/AtomicX.podspec'
   pod 'ChatUIKit', :path => '../uikit/ChatUIKit.podspec'
-  pod 'AtomicXCore', '3.4.0'
+  pod 'AtomicXCore', '3.5.0'
 
-end 
+end
 
 #Pods config
 post_install do |installer|
@@ -30,4 +30,3 @@ post_install do |installer|
         end
     end
 end
-

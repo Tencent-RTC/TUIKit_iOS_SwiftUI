@@ -481,7 +481,7 @@ public class WindowToastManager: ObservableObject {
             return
         }
         
-        let themeState = DefaultTheme
+        let themeState = ThemeState.shared
         
         toastWindow = ToastWindow(windowScene: windowScene)
         let toastView = AnyView(WindowToastView().environmentObject(themeState))

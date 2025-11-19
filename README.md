@@ -73,7 +73,7 @@ When you run it successfully, you'll see this UI:
 <table border="1" bordercolor="#eeeeee" style="border-collapse: collapse;">
   <tr>
     <td align="center" style="padding: 5px;">
-      <img src="https://sdk-im-1252463788.cos.ap-hongkong.myqcloud.com/tools/resource/chat/TUIKit_iOS_SwiftUI.png" width="300"/>
+      <img src="https://sdk-im-1252463788.cos.ap-hongkong.myqcloud.com/tools/resource/chat/TUIKit_iOS_SwiftUI.png" width="200"/>
     </td>
   </tr>
 </table>

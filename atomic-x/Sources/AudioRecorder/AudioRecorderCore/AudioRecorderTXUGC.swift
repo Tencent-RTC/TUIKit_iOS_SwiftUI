@@ -7,16 +7,18 @@ internal class AudioRecorderTXUGC: AudioRecorderInternalProtocol {
     static let AUDIO_SAMPLE_RATE: Int = 48000
     static let AUDIO_CHANNEL: Int = 2
     static let AUDIO_BITRATE_BPS: Int = 50 * 1024
-    static let MIN_DURATION_MS: Float = 1000.0
-    static let MAX_DURATION_MS: Float = 300000.0
     
-    static let ERROR_LESS_THAN_MIN_DURATION = 2;
-    static let START_RECORD_ERR_LICENCE_VERIFICATION_FAILED = -5;
+    static let ERROR_LESS_THAN_MIN_DURATION = 2
+    static let RECORD_RESULT_OK_BEYOND_MAX_DURATION = 3
+    static let START_RECORD_ERR_LICENCE_VERIFICATION_FAILED = -5
     
+    private var minDurationMs : Int = 1000
+    private var maxDurationMs : Int = 6000
     private var recorder: TXUGCAudioRecorderReflector?
-    private var ugcRecoderReflectorListener:AudioRecorderListenerProxy?
+    private var ugcRecoderReflectorListener: AudioRecorderListenerProxy?
     private var listener: AudioRecorderListener?
-    private var isUseAiDeNoise : Bool
+    private var path: String = "local"
+    private var isUseAiDeNoise: Bool
     
     init?() {
         recorder = TXUGCAudioRecorderReflector()
@@ -41,7 +43,11 @@ internal class AudioRecorderTXUGC: AudioRecorderInternalProtocol {
         }
     }
     
-    func startRecord(_ path : String) {
+    func startRecord(_ path : String, _ minDuration: Int, _ maxDuration: Int) {
+        self.path = path
+        self.minDurationMs = minDuration
+        self.maxDurationMs = maxDuration
+        
         guard let recorder = recorder else {
             logger.error("start recoder fail. recoder is nil")
             return;
@@ -51,8 +57,8 @@ internal class AudioRecorderTXUGC: AudioRecorderInternalProtocol {
             "audioSampleRate": AudioRecorderTXUGC.AUDIO_SAMPLE_RATE,
             "audioChannel": AudioRecorderTXUGC.AUDIO_CHANNEL,
             "audioBitrateBps": AudioRecorderTXUGC.AUDIO_BITRATE_BPS,
-            "minDurationMs": AudioRecorderTXUGC.MIN_DURATION_MS,
-            "maxDurationMs": AudioRecorderTXUGC.MAX_DURATION_MS,
+            "minDurationMs": minDuration,
+            "maxDurationMs": maxDuration,
             "enableAIDeNoise": isUseAiDeNoise
         ]
         
@@ -71,12 +77,14 @@ internal class AudioRecorderTXUGC: AudioRecorderInternalProtocol {
     
     private func handleLicenceVerificationFailed() {
         logger.info("handle licence verification failed.");
-        let signatureResult = AuidoRecordSignatureChecker.shareInstance().getSetSignatureResult()
         
-        if (signatureResult == AudioRecordSignatureResultCode.SUCCESS) {
-            listener?.onComplete(.errorUseAIDenoiseWrongSignature);
-        } else {
-            listener?.onComplete(AudioRecordResultCode.fromCode(signatureResult.rawValue));
+        #if DEBUG
+          WindowToastManager.shared.show(LocalizedChatString("AudioAuthorizationPrompter"), type: .warning, duration: 5)
+        #endif
+        
+        if (isUseAiDeNoise) {
+            isUseAiDeNoise = false
+            startRecord(self.path, minDurationMs, maxDurationMs)
         }
     }
     
@@ -105,6 +113,8 @@ internal class AudioRecorderTXUGC: AudioRecorderInternalProtocol {
             listener?.onComplete(.success)
         } else if (retCode == AudioRecorderTXUGC.ERROR_LESS_THAN_MIN_DURATION) {
             listener?.onComplete(.errorLessThanMinDuration)
+        } else if (retCode == AudioRecorderTXUGC.RECORD_RESULT_OK_BEYOND_MAX_DURATION) {
+            listener?.onComplete(.exceedMaxDuration)
         } else {
             listener?.onComplete(.errorRecordInnerFail)
         }

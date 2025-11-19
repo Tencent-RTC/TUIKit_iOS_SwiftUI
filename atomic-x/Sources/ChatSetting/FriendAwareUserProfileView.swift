@@ -19,7 +19,7 @@ public struct FriendAwareUserProfileView: View {
             } else if let isFriend = isFriend {
                 if isFriend {
                     // Show C2CChatSetting for friends
-                    C2CChatSetting(userID: userID, showsOwnNavigation: false)
+                    C2CChatSetting(userID: userID)
                 } else {
                     // Show AddFriendPage for non-friends
                     AddFriendPage(userID: userID, showsOwnNavigation: false)

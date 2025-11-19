@@ -1,20 +1,18 @@
 import AtomicXCore
 import SwiftUI
 
-private struct ConversationListStyleKey: EnvironmentKey {
-    static let defaultValue: ConversationListConfigProtocol = ChatConversationStyle()
-}
+public struct ConversationCustomAction {
+    public let title: String
+    public let action: (ConversationInfo) -> Void
 
-extension EnvironmentValues {
-    var ConversationListStyle: ConversationListConfigProtocol {
-        get { self[ConversationListStyleKey.self] }
-        set { self[ConversationListStyleKey.self] = newValue }
+    public init(title: String, action: @escaping (ConversationInfo) -> Void) {
+        self.title = title
+        self.action = action
     }
 }
 
 public struct ConversationList: View {
     @EnvironmentObject var themeState: ThemeState
-    @Environment(\.ConversationListStyle) var style: ConversationListConfigProtocol
     @State private var showingActionSheet = false
     @State private var selectedConversation: ConversationInfo?
     @State private var conversationList: [ConversationInfo] = []
@@ -22,9 +20,16 @@ public struct ConversationList: View {
     @State private var isStoreInitialized = false
     @State private var isRefreshing = false
     private let onConversationClick: (ConversationInfo) -> Void
+    private let customActions: [ConversationCustomAction]
+    private let config: ConversationActionConfigProtocol
 
-    public init(onConversationClick: @escaping (ConversationInfo) -> Void) {
+    public init(onConversationClick: @escaping (ConversationInfo) -> Void,
+                config: ConversationActionConfigProtocol = ChatConversationActionConfig(),
+                customActions: [ConversationCustomAction] = [])
+    {
         self.onConversationClick = onConversationClick
+        self.customActions = customActions
+        self.config = config
     }
 
     private var store: ConversationListStore {
@@ -38,90 +43,41 @@ public struct ConversationList: View {
         List {
             if #available(iOS 15.0, *) {
                 ForEach(conversationList) { conversation in
-                    Button(action: {
-                        clearConversationUnreadCount(conversation)
-                        onConversationClick(conversation)
-                    }) {
-                        ConversationCell(conversation: conversation)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .frame(height: 70)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                    .listRowBackground(conversationBackgroundColor(for: conversation))
-                    .id(conversation.conversationID)
-                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                        // Mark Read/Unread Button
-                        if style.isSupportMarkUnread {
-                            if conversation.unreadCount > 0 {
-                                Button(LocalizedChatString("MarkAsRead"), action: {
-                                    markConversationAsRead(conversation)
-                                })
-                                .tint(.green)
-                            } 
+                    conversationRow(for: conversation)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            buildMoreActions(for: conversation)
                         }
-                        
-                        // More Actions Button
-                        if style.isSupportMute || style.isSupportPin || style.isSupportMarkUnread {
-                            Button(LocalizedChatString("More"), action: {
-                                selectedConversation = conversation
-                                showingActionSheet = true
-                            })
-                            .tint(.blue)
-                        }
-                    }
                 }
             } else {
                 ForEach(conversationList) { conversation in
-                    Button(action: {
-                        clearConversationUnreadCount(conversation)
-                        onConversationClick(conversation)
-                    }) {
-                        ConversationCell(conversation: conversation)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .frame(height: 70)
-                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                    .listRowBackground(conversationBackgroundColor(for: conversation))
-                    .id(conversation.conversationID)
-                    .contextMenu {
-                        buildContextMenu(for: conversation)
-                    }
-                }
-                        .onDelete { indexSet in
-                            for index in indexSet {
-                                let conversation = conversationList[index]
-                                if style.isSupportDelete {
-                                    deleteConversation(conversation)
-                                }
-                            }
+                    conversationRow(for: conversation)
+                        .contextMenu {
+                            buildMoreActions(for: conversation)
                         }
-                    }
+                }
             }
-            .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \ConversationListState.conversationList)).dropFirst()) { conversationList in
-                self.conversationList = conversationList
-            }
-            .listStyle(PlainListStyle())
-            .onAppear {
-                initializeStoreIfNeeded()
-                loadConversations()
-                UITableView.appearance().separatorStyle = .none
-                UITableView.appearance().backgroundColor = .clear
-            }
-            .refreshableIfAvailable {
-                isRefreshing = true
-                loadConversations()
-            }
-            .listRowSeparatorIfAvailable(visibility: .hidden)
-            .background(themeState.colors.listColorDefault)
-            .actionSheet(isPresented: $showingActionSheet) {
-                ActionSheet(
-                    title: Text(LocalizedChatString("ChooseAnAction")),
-                    buttons: buildActionSheetButtons()
-                )
+        }
+        .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \ConversationListState.conversationList)).dropFirst()) { conversationList in
+            self.conversationList = conversationList
+        }
+        .listStyle(PlainListStyle())
+        .onAppear {
+            initializeStoreIfNeeded()
+            loadConversations()
+            UITableView.appearance().separatorStyle = .none
+            UITableView.appearance().backgroundColor = .clear
+        }
+        .refreshableIfAvailable {
+            isRefreshing = true
+            loadConversations()
+        }
+        .listRowSeparatorIfAvailable(visibility: .hidden)
+        .background(themeState.colors.listColorDefault)
+        .actionSheet(isPresented: $showingActionSheet) {
+            ActionSheet(
+                title: Text(LocalizedChatString("ChooseAnAction")),
+                buttons: buildActionSheetButtons()
+            )
         }
     }
 
@@ -134,41 +90,45 @@ public struct ConversationList: View {
         isStoreInitialized = true
     }
 
-    private func getConversationList() -> [ConversationInfo] {
-        return conversationList
+    private func conversationRow(for conversation: ConversationInfo) -> some View {
+        Button(action: {
+            clearConversationUnreadCount(conversation)
+            onConversationClick(conversation)
+        }) {
+            ConversationCell(conversation: conversation)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
+        .frame(height: 70)
+        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+        .listRowBackground(conversationBackgroundColor(for: conversation))
+        .id(conversation.conversationID)
     }
 
     @ViewBuilder
-    private func buildContextMenu(for conversation: ConversationInfo) -> some View {
-        if style.isSupportDelete {
+    private func buildMoreActions(for conversation: ConversationInfo) -> some View {
+        if config.isSupportDelete || config.isSupportPin || config.isSupportClearHistory || !customActions.isEmpty {
             if #available(iOS 15.0, *) {
-                Button(role: .destructive, action: {
-                    deleteConversation(conversation)
-                }) {
-                    Label(LocalizedChatString("Delete"), systemImage: "trash")
-                }
+                Button(LocalizedChatString("More"), action: {
+                    selectedConversation = conversation
+                    showingActionSheet = true
+                })
+                .tint(.blue)
             } else {
                 Button(action: {
-                    deleteConversation(conversation)
+                    selectedConversation = conversation
+                    showingActionSheet = true
                 }) {
-                    Label(LocalizedChatString("Delete"), systemImage: "trash")
+                    Label(LocalizedChatString("More"), systemImage: "ellipsis")
                 }
-            }
-        }
-
-        if style.isSupportMute || style.isSupportPin || style.isSupportMarkUnread {
-            Button(action: {
-                selectedConversation = conversation
-                showingActionSheet = true
-            }) {
-                Label(LocalizedChatString("More"), systemImage: "ellipsis")
             }
         }
     }
 
     private func buildActionSheetButtons() -> [ActionSheet.Button] {
         var buttons: [ActionSheet.Button] = []
-        if style.isSupportPin {
+        if config.isSupportPin {
             if selectedConversation?.isPinned == true {
                 buttons.append(.default(Text(LocalizedChatString("UnPin"))) {
                     if let conversation = selectedConversation {
@@ -183,25 +143,34 @@ public struct ConversationList: View {
                 })
             }
         }
-        if style.isSupportDelete {
+        if config.isSupportDelete {
             buttons.append(.default(Text(LocalizedChatString("Delete"))) {
                 if let conversation = selectedConversation {
                     deleteConversation(conversation)
                 }
             })
         }
-        buttons.append(.default(Text(LocalizedChatString("ClearHistoryChatMessage"))) {
-            if let conversation = selectedConversation {
-                clearConversationMessages(conversation)
-            }
-        })
+        if config.isSupportClearHistory {
+            buttons.append(.default(Text(LocalizedChatString("ClearHistoryChatMessage"))) {
+                if let conversation = selectedConversation {
+                    clearConversationMessages(conversation)
+                }
+            })
+        }
+        for customAction in customActions {
+            buttons.append(.default(Text(customAction.title)) {
+                if let conversation = selectedConversation {
+                    customAction.action(conversation)
+                }
+            })
+        }
         buttons.append(.cancel(Text(LocalizedChatString("Cancel"))))
         return buttons
     }
 
     private func loadConversations() {
         let option = ConversationFetchOption()
-        store.fetchConversationList(option, completion: {  result in
+        store.fetchConversationList(option, completion: { _ in
             DispatchQueue.main.async {
                 self.isRefreshing = false
             }
@@ -231,11 +200,11 @@ public struct ConversationList: View {
     private func clearConversationUnreadCount(_ conversation: ConversationInfo) {
         store.clearConversationUnreadCount(conversation.conversationID, completion: nil)
     }
-    
+
     private func markConversationAsRead(_ conversation: ConversationInfo) {
         store.clearConversationUnreadCount(conversation.conversationID, completion: nil)
     }
-    
+
     private func markConversationAsUnread(_ conversation: ConversationInfo) {
         store.markConversationUnread(conversation.conversationID, unread: true, completion: nil)
     }
@@ -266,7 +235,7 @@ private struct ConversationCell: View {
                 HStack(alignment: .center) {
                     TitleLabel(size: .s, text: conversation.title ?? "")
                     Spacer()
-                    if conversation.receiveOption == .notNotify  && conversation.groupType != GroupType.meeting {
+                    if conversation.receiveOption == .notNotify && conversation.groupType != GroupType.meeting {
                         Image(systemName: "bell.slash.fill")
                             .font(.system(size: 14))
                             .foregroundColor(themeState.colors.textColorSecondary)
@@ -279,7 +248,7 @@ private struct ConversationCell: View {
                 HStack(alignment: .center) {
                     let subtitle = MessageListHelper.getMessageAbstract(conversation.lastMessage)
                     let finalText = buildFinalText(subtitle: subtitle, conversation: conversation)
-                    
+
                     SubTitleLabel(size: .s, text: finalText)
                     Spacer()
                     HStack(spacing: 4) {
@@ -298,10 +267,10 @@ private struct ConversationCell: View {
         }
         .padding(.vertical, 11)
     }
-    
+
     private func buildFinalText(subtitle: String, conversation: ConversationInfo) -> String {
         let countUnit = LocalizedChatString("MessageCount")
-        
+
         if subtitle.contains("@") {
             let baseText = "@\(subtitle.dropFirst(1))"
             if conversation.receiveOption == .notNotify && conversation.unreadCount > 0 {
@@ -334,7 +303,7 @@ private enum ListRowSeparatorVisibility {
 private struct RefreshableModifier: ViewModifier {
     let action: () -> Void
     @State private var isRefreshing = false
-    
+
     func body(content: Content) -> some View {
         if #available(iOS 15.0, *) {
             content.refreshable {
@@ -391,7 +360,7 @@ private struct PullToRefreshView: UIViewRepresentable {
         DispatchQueue.main.async {
             if let tableView = findTableView(in: uiView) {
                 setupRefreshControl(for: tableView, context: context)
-                
+
                 if isRefreshing {
                     if tableView.refreshControl?.isRefreshing == false {
                         tableView.refreshControl?.beginRefreshing()
@@ -402,7 +371,7 @@ private struct PullToRefreshView: UIViewRepresentable {
             }
         }
     }
-    
+
     private func findTableView(in view: UIView) -> UITableView? {
         // Look for UITableView in the view hierarchy
         var currentView: UIView? = view.superview
@@ -414,7 +383,7 @@ private struct PullToRefreshView: UIViewRepresentable {
         }
         return nil
     }
-    
+
     private func setupRefreshControl(for tableView: UITableView, context: Context) {
         if tableView.refreshControl == nil {
             let refreshControl = UIRefreshControl()

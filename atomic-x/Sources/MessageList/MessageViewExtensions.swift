@@ -74,6 +74,7 @@ struct ScaleButtonStyle: ButtonStyle {
 struct MessageViewModifiers: ViewModifier {
     @Binding var messageBubbleFrame: CGRect
     @Binding var longPressed: Bool
+    @Environment(\.messageCustomActions) var customActions: [MessageCustomAction]
     let menuManager: MessageMenuManager
     let message: MessageInfo
     let style: MessageListConfigProtocol
@@ -90,7 +91,7 @@ struct MessageViewModifiers: ViewModifier {
                 longPressed = true
                 let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                 impactFeedback.impactOccurred()
-                menuManager.showMenu(for: message, bubbleFrame: messageBubbleFrame)
+                menuManager.showMenu(for: message, bubbleFrame: messageBubbleFrame, customActions: customActions)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     longPressed = false
                 }

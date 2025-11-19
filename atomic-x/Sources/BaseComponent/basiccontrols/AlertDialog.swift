@@ -89,7 +89,7 @@ public class WindowAlertManager: ObservableObject {
             return
         }
         
-        let themeState = DefaultTheme
+        let themeState = ThemeState.shared
         
         alertWindow = AlertWindow(windowScene: windowScene)
         let alertView = AnyView(WindowAlertView().environmentObject(themeState))

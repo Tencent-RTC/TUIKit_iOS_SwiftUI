@@ -194,8 +194,9 @@
     sharedInstanceInvocation.selector = sharedInstanceSelector;
     [sharedInstanceInvocation invoke];
     
-    __unsafe_unretained id sharedInstance;
-    [sharedInstanceInvocation getReturnValue:&sharedInstance];
+    __unsafe_unretained id temp;
+    [sharedInstanceInvocation getReturnValue:&temp];
+    id sharedInstance = temp;
     
     if (!sharedInstance) {
         NSLog(@"AuidoRecordSignatureChecker can not get V2TIMManager instance");

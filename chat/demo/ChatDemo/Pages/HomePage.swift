@@ -1,6 +1,6 @@
 import AtomicX
-import ChatUIKit
 import AtomicXCore
+import ChatUIKit
 import SwiftUI
 
 public struct HomePage: View {
@@ -37,25 +37,20 @@ public struct HomePage: View {
     }
 
     public var body: some View {
-        if #available(iOS 15.0, *) {
-            let _ = Self._printChanges()
-        }
-
         ZStack {
             TabView(selection: self.$selectedTab) {
                 ConversationsPage(
-                    onShowMessage: { navigationInfo in
+                    onConversationClick: { navigationInfo in
                         showChatPage(conversation: navigationInfo.conversation, locateMessage: navigationInfo.locateMessage)
                     }
                 )
                 .navigationTitle("")
                 .navigationBarHidden(true)
                 .tabItem {
-                    Label(LocalizedChatString("TabChats"), image:"tab_chat")
+                    Label(LocalizedChatString("TabChats"), image: "tab_chat")
                 }
                 .tag(Tab.chats)
                 .modifier(TabBadgeModifier(count: totalUnreadCount))
-                
 
                 ContactsPage(
                     onShowMessage: { conversation in
@@ -82,7 +77,7 @@ public struct HomePage: View {
                     }
                 )
                 .tabItem {
-                    Label(LocalizedChatString("TabContacts"),  image:"tab_contact")
+                    Label(LocalizedChatString("TabContacts"), image: "tab_contact")
                 }
                 .tag(Tab.contacts)
                 .navigationTitle("")
@@ -90,14 +85,13 @@ public struct HomePage: View {
 
                 SettingsPage()
                     .tabItem {
-                        Label(LocalizedChatString("TabSettings"), image:"tab_setting")
+                        Label(LocalizedChatString("TabSettings"), image: "tab_setting")
                     }
                     .tag(Tab.settings)
                     .navigationTitle("")
                     .navigationBarHidden(true)
-
             }
-            .onAppear() {
+            .onAppear {
                 let appearance = UITabBarAppearance()
                 appearance.configureWithTransparentBackground()
                 appearance.backgroundColor = UIColor.clear
@@ -165,9 +159,11 @@ public struct HomePage: View {
                                     dismissGroupChatSetting()
                                 }
                             },
-                            onPopToRoot: {
-                                dismissAllPages()
-                                selectedTab = .chats
+                            onContactDelete: {
+                                dismissChatPage()
+                            },
+                            onGroupDelete: {
+                                dismissChatPage()
                             }
                         )
                         .navigationBarHidden(true),
@@ -182,7 +178,6 @@ public struct HomePage: View {
                     NavigationLink(
                         destination: C2CChatSetting(
                             userID: contactUser.userID,
-                            showsOwnNavigation: false,
                             onSendMessageClick: {
                                 let newConversation = createConversationFromUser(contactUser)
                                 dismissContactDetail()
@@ -230,8 +225,7 @@ public struct HomePage: View {
                         onShowMessage: { conversation in
                             dismissGroupList()
                             showChatPage(conversation: conversation)
-                        },
-                        showsNavigationTitle: true
+                        }
                     )
                     .navigationBarTitle(LocalizedChatString("TabContacts"), displayMode: .inline)
                     .navigationBarItems(
@@ -264,8 +258,7 @@ public struct HomePage: View {
                                 avatarURL: userItem.avatarURL,
                                 title: userItem.title
                             ))
-                        },
-                        showsNavigationTitle: true
+                        }
                     )
                     .navigationBarTitle(LocalizedChatString("TabContacts"), displayMode: .inline)
                     .navigationBarItems(
@@ -287,7 +280,7 @@ public struct HomePage: View {
                     destination: FriendApplicationListView(
                         contactStore: ContactListStore.create()
                     )
-                    .navigationTitle(LocalizedChatString("ContactsNewFriends"))
+                    .navigationBarTitle(LocalizedChatString("ContactsNewFriends"), displayMode: .inline)
                     .navigationBarItems(
                         leading: Button(action: {
                             dismissNewFriends()
@@ -307,7 +300,7 @@ public struct HomePage: View {
                     destination: GroupApplicationListView(
                         contactStore: ContactListStore.create()
                     )
-                    .navigationTitle(LocalizedChatString("ContactsGroupApplications"))
+                    .navigationBarTitle(LocalizedChatString("ContactsGroupApplications"), displayMode: .inline)
                     .navigationBarItems(
                         leading: Button(action: {
                             dismissGroupApplications()
@@ -346,7 +339,7 @@ public struct HomePage: View {
     private func showC2CChatSettingPage(userID: String, needNavigateToChat: Bool = false) {
         currentC2CUserID = userID
         currentC2CNeedNavigateToChat = needNavigateToChat
-        
+
         // Check if user is friend before showing chat setting
         HomePage.checkIsFriend(userID: userID) { isFriend in
             DispatchQueue.main.async {
@@ -392,10 +385,14 @@ public struct HomePage: View {
 
     private func dismissC2CChatSetting() {
         showC2CChatSetting = false
+        currentC2CUserID = nil
+        currentC2CNeedNavigateToChat = false
     }
 
     private func dismissGroupChatSetting() {
         showGroupChatSetting = false
+        currentGroupID = nil
+        currentGroupNeedNavigateToChat = false
     }
 
     private func dismissGroupList() {
@@ -417,11 +414,11 @@ public struct HomePage: View {
     private func dismissContactDetail() {
         showContactDetail = false
     }
-    
+
     private func dismissAddFriend() {
         showAddFriend = false
     }
-    
+
     private func dismissAllPages() {
         showChatPage = false
         showC2CChatSetting = false
@@ -432,7 +429,7 @@ public struct HomePage: View {
         showBlackList = false
         showNewFriends = false
         showGroupApplications = false
-        
+
         currentConversation = nil
         currentLocateMessage = nil
         currentC2CUserID = nil
@@ -494,7 +491,7 @@ struct TabBadgeModifier: ViewModifier {
 extension HomePage {
     static func checkIsFriend(userID: String, completion: @escaping (Bool) -> Void) {
         let contactStore = ContactListStore.create()
-        
+
         contactStore.fetchUserInfo(userID: userID, completion: { result in
             switch result {
             case .success:

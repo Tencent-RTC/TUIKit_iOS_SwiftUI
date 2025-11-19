@@ -321,18 +321,15 @@ public struct GroupListView: View {
     private var contactStore: ContactListStore
     private let onShowMessage: ((ConversationInfo) -> Void)?
     private let onShowProfile: ((AZOrderedListItem) -> Void)?
-    private let showsNavigationTitle: Bool
 
     public init(
         contactStore: ContactListStore,
         onShowMessage: ((ConversationInfo) -> Void)? = nil,
-        onShowProfile: ((AZOrderedListItem) -> Void)? = nil,
-        showsNavigationTitle: Bool = true
+        onShowProfile: ((AZOrderedListItem) -> Void)? = nil
     ) {
         self.contactStore = contactStore
         self.onShowMessage = onShowMessage
         self.onShowProfile = onShowProfile
-        self.showsNavigationTitle = showsNavigationTitle
     }
 
     private func fetchData() {
@@ -380,7 +377,7 @@ public struct GroupListView: View {
         .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.groupList))) { groupList in
             self.groupList = groupList
         }
-        .modifier(NavigationTitleModifier(title: showsNavigationTitle ? LocalizedChatString("ContactsGroupChats") : nil))
+        .modifier(NavigationTitleModifier(title: LocalizedChatString("ContactsGroupChats")))
     }
 
     private func createConversationFromGroup(_ group: ContactInfo) -> ConversationInfo {
@@ -399,16 +396,13 @@ public struct BlackListView: View {
     @State private var blackList: [ContactInfo] = []
     private var contactStore: ContactListStore
     private let onShowProfile: ((AZOrderedListItem) -> Void)?
-    private let showsNavigationTitle: Bool
 
     public init(
         contactStore: ContactListStore,
-        onShowProfile: ((AZOrderedListItem) -> Void)? = nil,
-        showsNavigationTitle: Bool = true
+        onShowProfile: ((AZOrderedListItem) -> Void)? = nil
     ) {
         self.contactStore = contactStore
         self.onShowProfile = onShowProfile
-        self.showsNavigationTitle = showsNavigationTitle
     }
 
     public var body: some View {
@@ -447,7 +441,7 @@ public struct BlackListView: View {
         .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.blackList))) { blackList in
             self.blackList = blackList
         }
-        .modifier(NavigationTitleModifier(title: showsNavigationTitle ? LocalizedChatString("ContactsBlackList") : nil))
+        .modifier(NavigationTitleModifier(title: LocalizedChatString("ContactsBlackList")))
     }
 }
 

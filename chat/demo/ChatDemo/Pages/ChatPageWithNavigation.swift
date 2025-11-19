@@ -1,6 +1,6 @@
 import AtomicX
-import ChatUIKit
 import AtomicXCore
+import ChatUIKit
 import SwiftUI
 
 struct ChatPageWithNavigation: View {
@@ -21,7 +21,8 @@ struct ChatPageWithNavigation: View {
     let onGroupChatSettingDismiss: () -> Void
     let onC2CChatSettingSendMessage: (String) -> Void
     let onGroupChatSettingSendMessage: (String) -> Void
-    let onPopToRoot: (() -> Void)?
+    let onContactDelete: () -> Void
+    let onGroupDelete: () -> Void
     
     var body: some View {
         ZStack {
@@ -37,11 +38,12 @@ struct ChatPageWithNavigation: View {
                 NavigationLink(
                     destination: C2CChatSetting(
                         userID: userID,
-                        showsOwnNavigation: false,
                         onSendMessageClick: {
                             onC2CChatSettingSendMessage(userID)
-                        }
+                        },
+                        onContactDelete: onContactDelete
                     )
+                    .id(userID)
                     .navigationBarTitle(LocalizedChatString("ProfileDetails"), displayMode: .inline)
                     .navigationBarItems(
                         leading: Button(action: {
@@ -63,12 +65,12 @@ struct ChatPageWithNavigation: View {
                 NavigationLink(
                     destination: GroupChatSetting(
                         groupID: groupID,
-                        showsOwnNavigation: false,
                         onSendMessageClick: {
                             onGroupChatSettingSendMessage(groupID)
                         },
-                        onPopToRoot: onPopToRoot
+                        onGroupDelete: onGroupDelete
                     )
+                    .id(groupID)
                     .navigationBarTitle(LocalizedChatString("GroupSettings"), displayMode: .inline)
                     .navigationBarItems(
                         leading: Button(action: {

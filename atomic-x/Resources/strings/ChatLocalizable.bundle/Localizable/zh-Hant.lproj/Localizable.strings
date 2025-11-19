@@ -745,7 +745,9 @@
 "QuickReplyThanks" = "謝謝！";
 "QuickReplyReceived" = "收到";
 "QuickReplyProcessing" = "正在處理中";
-"VoiceRecordTimeLimitReached" = "語音錄影時長上限";
+"AudioRecordTimeLimitReached" = "語音錄影時長上限";
+"AudioRecorderLessThanMinTime" = "語音錄製時長太短了";
+"AudioAuthorizationPrompter" = "當前配寘不能開啟AI降噪. 僅Debug版本有該提示";
 "ChooseMediaType" = "選擇媒體類型";
 "SendMessage" = "Send a message";
 "AudioDownloadFailed" = "下載語音訊息失敗";

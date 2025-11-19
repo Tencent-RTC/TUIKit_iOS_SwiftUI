@@ -1,7 +1,7 @@
 
 Pod::Spec.new do |s|
     s.name             = 'ChatUIKit'
-    s.version          = '3.4.0'
+    s.version          = '3.5.0'
     s.summary          = 'Chat UIKit Component'
     s.homepage         = 'https://trtc.io/document/chat-overview?product=chat&menulabel=uikit&platform=ios%20and%20macos'
     s.license          = { :type => 'Proprietary',

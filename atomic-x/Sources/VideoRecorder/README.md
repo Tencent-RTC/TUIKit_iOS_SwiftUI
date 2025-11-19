@@ -1,64 +1,72 @@
-一 如果您在使用录制的时候提示"由于您的工程配置，您当前功能将受限...",这是因为视频录制的某些功能需要用到TXLiteAVSDK_Professional，而当前缺失该依赖。
+以下为转为 Markdown 的两份文档：中文版本与英文版本。
 
-解决方法1：
-在您的项目中依赖最新的TXLiteAVSDK_Professional，如果您的项目已经有依赖TXLiteAVSDK_TRTC，则将其替换为TXLiteAVSDK_Professional
-TXLiteAVSDK_Professional完全包含了TXLiteAVSDK_TRTC，用其替换TXLiteAVSDK_TRTC不会让您其他的功能有任何的变化
+中文版本
+# 开启美颜/纵横比设置
 
-解决方法2:
-您可以在配置代码中屏蔽引起弹窗的相关功能
-配置文件位置：Resources/assets/chat/VideoRecorder.bundle/config/default_config.json，配置文件如下:
-{
-  "max_record_duration_ms": "15000",
-  "min_record_duration_ms": "2000",
-  "video_quality": "2",
-  "primary_theme_color": "#147AFF",
-  "is_default_front_camera":"false",
-  "record_mode":"0",
-  "support_record_torch": "true",
-  "support_record_beauty": "true",
-  "support_record_aspect": "true",
-}
+美颜和纵横比设置是 VideoRecorder 的高级功能。启用需满足以下条件：
 
-比如您如果想屏蔽美颜功能，将support_record_beauty项设置为false即可。如果没有依赖TXLiteAVSDK_Professional你可能需要屏蔽support_record_beauty，support_record_aspect
+## 1. 依赖 TXLiteAVSDK_Professional
+
+在项目或任一模块的 Podfile 中添加依赖：
+
+```ruby
+pod 'TXLiteAVSDK_Professional'
+```
+
+- 如果工程任一模块已依赖 TXLiteAVSDK_TRTC，可将其替换为 TXLiteAVSDK_Professional（不会影响其他模块的正常使用）。
+- 依赖 TXLiteAVSDK_Professional 后，可使用纵横比设置；同时在兼容性与画质方面会有更好的表现。
+
+## 2. 开通“多媒体高级功能”权限
+
+当前仍需通过内测申请开通“多媒体插件高级功能”使用权限（包含视频录制、音频录制、图片/视频编辑等能力）。
+
+- 申请入口：多媒体插件高级功能内测申请地址（https://cloud.tencent.com/apply/p/wlav0nzz7dp）。
+
+### 注意事项
+1. 提交后通常在 1 个工作日内完成审核。建议使用企业认证的腾讯云账号申请，以提升通过率。
+2. 内测使用日期截至 2026 年 7 月 1 日，届时所有内测使用权限将失效。
+3. 内测截止日期之前，将上线高级功能的付费购买方案（购买方式与插件市场其他插件一致，详见“插件市场概述及开通指引”）。若到期未购买，美颜功能将被屏蔽（不显示美颜按钮）；购买后将自动恢复显示（除非在配置中被强制屏蔽）。
+
+## 3. 不同构建配置下的行为说明
+
+- Release：
+  - 若不满足启用条件，即使在配置中开启，高级功能也不会生效（相关按钮将自动隐藏）。
+- Debug：
+  - 点击不支持的功能时，会在 UI 中弹窗提示。
+  - 如需在 Debug 版本中也屏蔽这些功能，可在 Config 或配置文件中关闭对应开关（详见配置描述）。
 
 
+English Version
+# Enable Beauty/Aspect Ratio Settings
 
-二 如果您在使用录制的时候提示"由于您未开通多媒体插件使用权限，您当前功能将受限...",这是因为视频录制的某些功能需要注册开通
+Beauty and aspect ratio are advanced features of VideoRecorder. To enable them, the following conditions must be met:
 
-解决方法1：
-注册开通视频录制的高级功能并了解更多详细功能，请访问官方文档：https://cloud.tencent.com/document/product/269/113290
-解决方法2：
-屏蔽部份功能，屏蔽方法如问题一的解决方法2，您需要屏蔽support_record_beauty
+## 1. Depend on TXLiteAVSDK_Professional
 
-  
-  
-I. If you encounter the prompt "Due to your project configuration, your current features will be restricted..." while using the recording function, this is because certain video recording features require the use of TXLiteAVSDK_Professional, which is currently missing as a dependency.
+Add the dependency in your project or any module’s Podfile:
 
-Solution 1:  
-In your project, depend on the latest version of TXLiteAVSDK_Professional. If your project already depends on TXLiteAVSDK_TRTC, replace it with TXLiteAVSDK_Professional.  
-LiteAVSDK_Professional fully includes TXLiteAVSDK_TRTC. Replacing TXLiteAVSDK_TRTC with it will not cause any changes to your other functionalities.
+```ruby
+pod 'TXLiteAVSDK_Professional'
+```
 
-Solution 2:  
-You can disable the relevant features that trigger the prompt in the configuration code.  
-Configuration file location: Resources/assets/chat/VideoRecorder.bundle/config/default_config.json. The configuration file is as follows:  
-{  
-  "max_record_duration_ms": "15000",  
-  "min_record_duration_ms": "2000",  
-  "video_quality": "2",  
-  "primary_theme_color": "#147AFF",  
-  "is_default_front_camera": "false",  
-  "record_mode": "0",  
-  "support_record_torch": "true",  
-  "support_record_beauty": "true",  
-  "support_record_aspect": "true",  
-}  
+- If any module already depends on TXLiteAVSDK_TRTC, replace it with TXLiteAVSDK_Professional (this change will not affect other modules).
+- After switching to TXLiteAVSDK_Professional, you can enable aspect ratio settings, with improved compatibility and image quality.
 
-For example, if you want to disable the beauty filter feature, set the "support_record_beauty" item to false. If you do not depend on TXLiteAVSDK_Professional, you may need to disable "support_record_beauty" and "support_record_aspect".
+## 2. Enable “Advanced Multimedia Features” Permission
 
-II. If you encounter the prompt "Due to your failure to activate the multimedia plugin usage permissions, your current features will be restricted..." while using the recording function, this is because certain video recording features require registration and activation.
+You currently need to apply for internal testing access to the “Advanced Multimedia Plugin Features” (including video recording, audio recording, and photo/video editing).
 
-Solution 1:  
-To register and activate the advanced features of video recording and learn more about the detailed functionalities, please visit the official documentation: https://cloud.tencent.com/document/product/269/113290  
+- Application entry: Advanced Multimedia Plugin Features Early Access (https://cloud.tencent.com/apply/p/wlav0nzz7dp).
 
-Solution 2:  
-Disable some features. The method to disable them is the same as Solution 2 for Issue I. You need to disable "support_record_beauty".
+### Notes
+1. Reviews are typically completed within one business day. We recommend applying with a Tencent Cloud enterprise-verified account to increase the approval rate.
+2. The internal testing access is valid until July 1, 2026. After that date, all early-access permissions will expire.
+3. Before the end of the early-access period, a paid plan for advanced features will be available (purchasing follows the same process as other plugins; see “Plugin Marketplace Overview and Activation Guide”). If not purchased upon expiration, the beauty feature will be disabled (the beauty button will be hidden). It will automatically be re-enabled after purchase (unless explicitly disabled via configuration).
+
+## 3. Behavior in Different Build Configurations
+
+- Release:
+  - If prerequisites are not met, advanced features will not work even if enabled in the configuration (related buttons will be automatically hidden).
+- Debug:
+  - Tapping unsupported features will trigger a UI dialog/toast message.
+  - If you also want to hide these features in Debug, disable the corresponding switches in the Config or configuration file (see configuration documentation).

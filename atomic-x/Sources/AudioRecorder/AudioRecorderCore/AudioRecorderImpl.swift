@@ -9,21 +9,29 @@ import os.log
 internal class AudioRecorderImpl: AudioRecorder {
     private let logger = Logger(subsystem: "AudioRecoder", category: "AudioRecorderControl")
     private static let kMinDuration:Int = 1000
+    private static let kMaxDuration:Int = 60000
     
     private var recordedFilePath: String?
     private var recorder:AudioRecorderInternalProtocol?
     private var isCancelRecord:Bool = false
     private var isRecording: Bool = false
+    private var minDurationMs: Int = AudioRecorderImpl.kMinDuration
+    private var maxDurationMs: Int = AudioRecorderImpl.kMaxDuration
+    private var currentTime:Int = 0
     
-    override public func startRecord(filepath: String? = nil, enableAIDeNoise: Bool = false) {
-        logger.info("start record file path is \( filepath ?? "")")
+    override public func startRecord(filepath: String? = nil, enableAIDeNoise: Bool = false,
+                                     minDurationMs: Int = AudioRecorderImpl.kMinDuration, maxDurationMs: Int = AudioRecorderImpl.kMaxDuration) {
+        logger.info("start record file path is \( filepath ?? "") enableAIDeNoise : \(enableAIDeNoise) minDuration: \(minDurationMs) maxDuration : \(maxDurationMs)")
+        
+        self.minDurationMs = minDurationMs
+        self.maxDurationMs = maxDurationMs
+        self.enableAIDeNoise(enableAIDeNoise)
         
         checkMicPermission { [weak self] isGranted, _ in
             guard let self = self else { return }
             DispatchQueue.main.async {
                 if isGranted {
                     self.executeOnMainThread {
-                        self.enableAIDeNoise(enableAIDeNoise)
                         self.startRecordInternal(filepath)
                     }
                 } else {
@@ -68,7 +76,13 @@ internal class AudioRecorderImpl: AudioRecorder {
         }
         
         var listener = AudioRecorderListener()
-        listener.onProgress = {[weak self] duration in self?.currentTime = duration}
+        listener.onProgress = { [weak self] duration in
+            self?.currentTime = duration
+            self?.onRecordTime?(duration)
+        }
+        listener.onPower = { [weak self] power in
+            self?.onPowerLevel?(power)
+        }
         listener.onComplete = onComplete
         recorder?.setListener(listener)
     }
@@ -105,7 +119,7 @@ internal class AudioRecorderImpl: AudioRecorder {
             return
         }
         
-        recorder.startRecord(recordedFilePath)
+        recorder.startRecord(recordedFilePath, minDurationMs, maxDurationMs)
         isRecording = true
         isCancelRecord = false
     }
@@ -133,7 +147,7 @@ internal class AudioRecorderImpl: AudioRecorder {
         completion(isGranted, false)
     }
     
-    private func notifyCompleteOnMainThread(_ retCode:AudioRecordResultCode) {        
+    private func notifyCompleteOnMainThread(_ retCode: AudioRecordResultCode) {
         executeOnMainThread {
             if !self.isCancelRecord {
                 self.onRecordingComplete?(retCode, self.recordedFilePath ?? "", Int(self.currentTime) / 1000)

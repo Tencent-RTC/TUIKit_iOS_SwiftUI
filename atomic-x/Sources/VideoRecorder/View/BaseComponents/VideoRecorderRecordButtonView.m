@@ -5,7 +5,7 @@
 #import <Foundation/Foundation.h>
 #import "VideoRecorderCircleProgressView.h"
 #import "VideoRecorderCommon.h"
-#import "VideoRecorderConfig.h"
+#include "videoRecorderConfigInternal.h"
 
 static const CGFloat RecordAnimeDuration = 0.3;
 
@@ -32,7 +32,7 @@ static const CGFloat RecordAnimeDuration = 0.3;
     _progressView = [[VideoRecorderCircleProgressView alloc] init];
     _progressView.lineCap = kCALineCapButt;
     _progressView.progressBgColor = VideoRecorderDynamicColor(@"record_btn_progress_bg_color", @"#FFFFFF");
-    _progressView.progressColor = [[VideoRecorderConfig sharedInstance] getThemeColor];
+    _progressView.progressColor = [[VideoRecorderConfigInternal sharedInstance] getThemeColor];
     _progressView.width = 2;
     [self addSubview:_progressView];
 

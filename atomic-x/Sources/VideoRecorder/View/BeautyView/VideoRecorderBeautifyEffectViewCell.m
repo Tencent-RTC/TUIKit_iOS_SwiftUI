@@ -4,7 +4,7 @@
 #import "VideoRecorderBeautifyEffectViewCell.h"
 #import <Masonry/Masonry.h>
 #import "VideoRecorderCommon.h"
-#import "VideoRecorderConfig.h"
+#include "videoRecorderConfigInternal.h"
 
 const CGFloat MaskBorderWidth = 2;
 const CGFloat EffectCellRadius = 10;
@@ -56,7 +56,7 @@ const CGFloat LabelInsectToBottom = 5;
     _highlightView = [[UIView alloc] init];
     [self.contentView addSubview:_highlightView];
     _highlightView.hidden = YES;
-    _highlightView.backgroundColor = [[VideoRecorderConfig sharedInstance] getThemeColor];
+    _highlightView.backgroundColor = [[VideoRecorderConfigInternal sharedInstance] getThemeColor];
 
     _label = [[UILabel alloc] init];
     _label.font = [UIFont systemFontOfSize:LabelFontSize];

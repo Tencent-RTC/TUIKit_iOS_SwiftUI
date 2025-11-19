@@ -7,12 +7,12 @@
 #import "VideoRecorderCommon.h"
 #import "VideoRecorderIconLabelButtonView.h"
 #import "VideoRecorderRecordButtonView.h"
-#import "VideoRecorderConfig.h"
+#include "videoRecorderConfigInternal.h"
 #import "VideoRecorderAuthorizationPrompterController.h"
 
 #define MIXED_RECORD_MODE 0
 #define PHOTO_ONLY_RECORD_MODE 1
-#define VIDEO_ONLY_RECORD_MODE 2 // Not currently supported
+#define VIDEO_ONLY_RECORD_MODE 2
 
 #pragma mark - UI relative constants
 const static CGFloat BtnStartRecordSize = 72;
@@ -49,7 +49,7 @@ const static BOOL ShowDurationLabel = YES;
     UIButton *_lastFuncitonBtn;
     UILabel *_lbDuration;
     UILabel *_lbTip;
-    BOOL _isOnlySupportTakePhoto;
+    int _recordeMode;
 }
 @end
 
@@ -65,7 +65,7 @@ const static BOOL ShowDurationLabel = YES;
     _flashState = NO;
     _aspectRatio = VideoRecorderRecordAspectRatio9_16;
     _beautifySettings = beautifySettings;
-    _isOnlySupportTakePhoto = [[VideoRecorderConfig sharedInstance] getRecordeMode] == PHOTO_ONLY_RECORD_MODE;
+    _recordeMode = [[VideoRecorderConfigInternal sharedInstance] getRecordeMode];
     if (_beautifySettings == nil) {
         _beautifySettings = [[VideoRecorderBeautifySettings alloc] init];
     }
@@ -115,10 +115,12 @@ const static BOOL ShowDurationLabel = YES;
     
     _lbTip = [[UILabel alloc] init];
     [self addSubview:_lbTip];
-    if (_isOnlySupportTakePhoto) {
-        _lbTip.text = [VideoRecorderCommon localizedStringForKey:@"record_photo_tip"];
+    if (_recordeMode == MIXED_RECORD_MODE) {
+        _lbTip.text = [VideoRecorderCommon localizedStringForKey:@"record_mode_mix_tip"];
+    } else if (_recordeMode == PHOTO_ONLY_RECORD_MODE) {
+        _lbTip.text = [VideoRecorderCommon localizedStringForKey:@"record_mode_photo_tip"];
     } else {
-        _lbTip.text = [VideoRecorderCommon localizedStringForKey:@"record_tip"];
+        _lbTip.text = [VideoRecorderCommon localizedStringForKey:@"record_mode_video_tip"];
     }
     
     _lbTip.font = [UIFont systemFontOfSize:16];
@@ -137,7 +139,7 @@ const static BOOL ShowDurationLabel = YES;
     _btnRecord.dotSizePressed = BtnStartRecordDotSizePressed;
     _btnRecord.progressSizeNormal = BtnStartRecordProgressSizeNormal;
     _btnRecord.progressSizePressed = BtnStartRecordProgressSizePressed;
-    _btnRecord.isOnlySupportTakePhoto = _isOnlySupportTakePhoto;
+    _btnRecord.isOnlySupportTakePhoto = _recordeMode != PHOTO_ONLY_RECORD_MODE;
     _btnRecord.delegate = self;
     _btnExitRecord = [self newCustomButtonWithImage:VideoRecorderBundleThemeImage(@"cross") onTouchUpInside:@selector(onBtnExitClick)];
     _btnCameraSwitch = [self newCustomButtonWithImage:VideoRecorderBundleThemeImage(@"camera_switch")
@@ -167,7 +169,7 @@ const static BOOL ShowDurationLabel = YES;
 }
 
 - (void) initTorchView {
-    if (![[VideoRecorderConfig sharedInstance] isSupportRecordTorch]) {
+    if (![[VideoRecorderConfigInternal sharedInstance] isSupportRecordTorch]) {
         return;
     }
     
@@ -183,9 +185,17 @@ const static BOOL ShowDurationLabel = YES;
 }
 
 - (void) initBeautyView {
-    if (![[VideoRecorderConfig sharedInstance] isSupportRecordBeauty]) {
+    if (![[VideoRecorderConfigInternal sharedInstance] isSupportRecordBeauty]) {
         return;
     }
+    
+    
+#ifndef DEBUG
+    if (![VideoRecorderAuthorizationPrompterController isHasSignature]
+        || ![VideoRecorderAuthorizationPrompterController isHasLiteavProSdk]) {
+        return;
+    }
+#endif
     
     _btnBeautify = [self newFunctionButtonWithImage:VideoRecorderBundleThemeImage(@"beauty_record")
                                               title:[VideoRecorderCommon localizedStringForKey:@"beautify"]
@@ -204,9 +214,15 @@ const static BOOL ShowDurationLabel = YES;
 }
 
 - (void) initAspectView {
-    if (![[VideoRecorderConfig sharedInstance] isSupportRecordAspect]) {
+    if (![[VideoRecorderConfigInternal sharedInstance] isSupportRecordAspect]) {
         return;
     }
+ 
+#ifndef DEBUG
+    if (![VideoRecorderAuthorizationPrompterController isHasLiteavProSdk]) {
+        return;
+    }
+#endif
     
     _btnAspect = [self newFunctionButtonWithImage:VideoRecorderBundleThemeImage(@"record_aspect_9_16")
                                             title:[VideoRecorderCommon localizedStringForKey:@"aspect"]
@@ -301,7 +317,7 @@ const static BOOL ShowDurationLabel = YES;
 
 #pragma mark - VideoRecorderRecordButtonDelegate protocol
 - (void)onRecordButtonLongPressBegan:(VideoRecorderRecordButtonView *)btn {
-    if (!_isOnlySupportTakePhoto) {
+    if (_recordeMode != PHOTO_ONLY_RECORD_MODE) {
         [_delegate recordControlViewOnRecordStart];
         _lbDuration.hidden = !ShowDurationLabel;
     } else {
@@ -324,9 +340,9 @@ const static BOOL ShowDurationLabel = YES;
 }
 
 - (void)onRecordButtonLongPressEnded:(VideoRecorderRecordButtonView *)btn {
-    if (!_isOnlySupportTakePhoto) {
+    if (_recordeMode != PHOTO_ONLY_RECORD_MODE) {
         [_delegate recordControlViewOnRecordFinish];
-    } else {
+    } else if (_recordeMode != VIDEO_ONLY_RECORD_MODE){
         [_delegate recordControlViewPhoto];
     }
     
@@ -347,7 +363,7 @@ const static BOOL ShowDurationLabel = YES;
 }
 
 - (void)onRecordButtonLongPressCancelled:(VideoRecorderRecordButtonView *)btn { 
-    if (!_isOnlySupportTakePhoto) {
+    if (_recordeMode != PHOTO_ONLY_RECORD_MODE) {
         [_delegate recordControlViewOnRecordFinish];
     }
     
@@ -368,7 +384,9 @@ const static BOOL ShowDurationLabel = YES;
 }
 
 - (void)onRecordButtonTap:(VideoRecorderRecordButtonView *)btn {
-    [_delegate recordControlViewPhoto];
+    if (_recordeMode != VIDEO_ONLY_RECORD_MODE) {
+        [_delegate recordControlViewPhoto];
+    }
 }
 
 #pragma mark - Properties

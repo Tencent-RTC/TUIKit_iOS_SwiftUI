@@ -9,7 +9,7 @@
 #import "VideoRecorderBeautifyEffectPanelView.h"
 #import "VideoRecorderImageUtil.h"
 #import "VideoRecorderTabPanelView.h"
-#import "VideoRecorderConfig.h"
+#import "VideoRecorderConfigInternal.h"
 
 #pragma mark - VideoRecorderBeautifyView
 @interface VideoRecorderBeautifyView () <VideoRecorderEffectPanelDelegate, VideoRecorderTabPanelDelegate> {
@@ -66,7 +66,7 @@
     [_topPanel addSubview:_imgViewCompare];
     _imgViewCompare.image = VideoRecorderBundleThemeImage(@"effect_compare");
 
-    UIColor* themeColor = [[VideoRecorderConfig sharedInstance] getThemeColor];
+    UIColor* themeColor = [[VideoRecorderConfigInternal sharedInstance] getThemeColor];
     _slider = [[UISlider alloc] init];
     [_topPanel addSubview:_slider];
     //_slider.thumbTintColor = VideoRecorderDynamicColor(@"theme_accent_dark_color", @"#006CFF");

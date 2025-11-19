@@ -36,16 +36,16 @@ public struct ThemeConfig: Equatable, Codable {
     }
 }
 
-public let DefaultTheme = ThemeState()
 public class ThemeState: ObservableObject {
     private static let ThemeKey = "BaseComponentThemeKey"
     @Published public var currentTheme: ThemeConfig = .init(mode: .system)
     @Published private var systemInterfaceStyle: UIUserInterfaceStyle = .unspecified
+    public static let shared = ThemeState()
 
     private var cachedColorScheme: SemanticColorScheme?
     private var cachedThemeConfig: ThemeConfig?
 
-    public init() {
+    init() {
         loadTheme()
         setupSystemThemeObserver()
     }
@@ -124,11 +124,11 @@ public class ThemeState: ObservableObject {
             #endif
         }
     }
-    
+
     private func setupSystemThemeObserver() {
         #if os(iOS) || os(tvOS)
         updateSystemInterfaceStyle()
-        
+
         NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification,
             object: nil,
@@ -136,7 +136,7 @@ public class ThemeState: ObservableObject {
         ) { [weak self] _ in
             self?.updateSystemInterfaceStyle()
         }
-        
+
         NotificationCenter.default.addObserver(
             forName: Notification.Name("UITraitCollectionDidChangeNotification"),
             object: nil,
@@ -146,17 +146,19 @@ public class ThemeState: ObservableObject {
         }
         #endif
     }
-    
+
     deinit {
-          NotificationCenter.default.removeObserver(self)
+        NotificationCenter.default.removeObserver(self)
     }
+
     private func updateSystemInterfaceStyle() {
         #if os(iOS) || os(tvOS)
         let newStyle: UIUserInterfaceStyle
-        
+
         if #available(iOS 13.0, *) {
             if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-               let window = windowScene.windows.first {
+               let window = windowScene.windows.first
+            {
                 newStyle = window.traitCollection.userInterfaceStyle
             } else {
                 newStyle = UIScreen.main.traitCollection.userInterfaceStyle
@@ -164,10 +166,10 @@ public class ThemeState: ObservableObject {
         } else {
             newStyle = .unspecified
         }
-        
+
         if systemInterfaceStyle != newStyle {
             systemInterfaceStyle = newStyle
-            clearCache() 
+            clearCache()
         }
         #endif
     }

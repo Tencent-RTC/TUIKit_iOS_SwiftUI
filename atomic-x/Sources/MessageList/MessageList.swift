@@ -4,6 +4,25 @@ import Combine
 import Foundation
 import SwiftUI
 
+public struct MessageCustomAction {
+    public let title: String
+    public let iconName: String
+    public let systemIconFallback: String
+    public let action: (MessageInfo) -> Void
+
+    public init(
+        title: String,
+        iconName: String = "",
+        systemIconFallback: String = "ellipsis",
+        action: @escaping (MessageInfo) -> Void
+    ) {
+        self.title = title
+        self.iconName = iconName
+        self.systemIconFallback = systemIconFallback
+        self.action = action
+    }
+}
+
 extension View {
     func onValueChange<Value: Equatable>(of value: Value, perform action: @escaping (Value) -> Void) -> some View {
         if #available(iOS 15.0, *) {
@@ -65,13 +84,22 @@ private struct RefreshableModifier: ViewModifier {
 }
 
 private struct MessageListConfigProtocolKey: EnvironmentKey {
-    static let defaultValue: MessageListConfigProtocol = ChatMessageStyle()
+    static let defaultValue: MessageListConfigProtocol = ChatMessageListConfig()
+}
+
+private struct MessageCustomActionsKey: EnvironmentKey {
+    static let defaultValue: [MessageCustomAction] = []
 }
 
 extension EnvironmentValues {
-    var MessageListConfigProtocol: MessageListConfigProtocol {
+    var messageListConfigProtocol: MessageListConfigProtocol {
         get { self[MessageListConfigProtocolKey.self] }
         set { self[MessageListConfigProtocolKey.self] = newValue }
+    }
+
+    var messageCustomActions: [MessageCustomAction] {
+        get { self[MessageCustomActionsKey.self] }
+        set { self[MessageCustomActionsKey.self] = newValue }
     }
 }
 
@@ -94,7 +122,12 @@ public struct MessageList: View {
     @State private var messageListStore: MessageListStore? = nil
     @State private var isStoreInitialized = false
     @State private var isPageVisible = false
-    let listStyle: MessageListConfigProtocol
+    @State private var hasInitialLoaded = false
+    @State private var messageCountOnDisappear: Int = 0
+    @State private var scrollProxyReference: ScrollViewProxy? = nil
+    @State private var isInitialScrollComplete = false
+    let config: MessageListConfigProtocol & MessageActionConfigProtocol
+    private let customActions: [MessageCustomAction]
 
     private let conversationID: String
     private let onUserClick: ((String) -> Void)?
@@ -103,15 +136,17 @@ public struct MessageList: View {
 
     public init(
         conversationID: String,
-        listStyle: MessageListConfigProtocol,
+        config: MessageListConfigProtocol & MessageActionConfigProtocol = ChatMessageListConfig(),
         locateMessage: MessageInfo? = nil,
-        onUserClick: ((String) -> Void)? = nil
+        onUserClick: ((String) -> Void)? = nil,
+        customActions: [MessageCustomAction] = []
     ) {
         self.conversationID = conversationID
-        self.listStyle = listStyle
         self.locateMessage = locateMessage
         self.onUserClick = onUserClick
+        self.customActions = customActions
         self.conversationStore = ConversationListStore.create()
+        self.config = config
     }
 
     private var store: MessageListStore {
@@ -122,19 +157,17 @@ public struct MessageList: View {
     }
 
     public var body: some View {
-        if #available(iOS 15.0, *) {
-            let _ = Self._printChanges()
-        } else {
-            // Fallback on earlier versions
-        }
-
         ZStack(alignment: .top) {
             themeState.colors.bgColorOperate.ignoresSafeArea()
-            if isLoading {
+
+            scrollableMessageListView
+                .opacity(isInitialScrollComplete ? 1 : 0)
+            MessageMenuView
+                .opacity(isInitialScrollComplete ? 1 : 0)
+
+            if isLoading || !isInitialScrollComplete {
                 loadingIndicatorView
             }
-            scrollableMessageListView
-            MessageMenuView
         }
         .padding(.bottom, 8)
         .background(themeState.colors.bgColorOperate)
@@ -142,7 +175,28 @@ public struct MessageList: View {
         .onAppear {
             isPageVisible = true
             initializeStoreIfNeeded()
-            fetchMessages()
+
+            if !hasInitialLoaded {
+                isInitialScrollComplete = false
+                fetchMessages()
+                hasInitialLoaded = true
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                    if !isInitialScrollComplete {
+                        print("MessageList: Force stop loading due to timeout")
+                        isInitialScrollComplete = true
+                    }
+                }
+            } else {
+                isInitialScrollComplete = true
+                if messageList.count > messageCountOnDisappear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        if let proxy = scrollProxyReference {
+                            scrollToBottom(proxy: proxy, animated: true)
+                        }
+                    }
+                }
+            }
 
             if #available(iOS 15.0, *) {
             } else {
@@ -152,6 +206,7 @@ public struct MessageList: View {
         }
         .onDisappear {
             isPageVisible = false
+            messageCountOnDisappear = messageList.count
         }
         .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \MessageListState.messageList))) { messageList in
             self.messageList = messageList
@@ -194,7 +249,8 @@ public struct MessageList: View {
                 onUserClick: onUserClick,
                 parentMessageList: messageList
             )
-            .environment(\.MessageListConfigProtocol, listStyle)
+            .environment(\.messageListConfigProtocol, config)
+            .environment(\.messageCustomActions, customActions)
             .environmentObject(menuManager)
             .environment(\.locateMessageID, locateMessage?.msgID)
             .id(message.id)
@@ -245,6 +301,9 @@ public struct MessageList: View {
                 }
             }
             .background(themeState.colors.bgColorOperate)
+            .onAppear {
+                scrollProxyReference = scrollProxy
+            }
             .simultaneousGesture(
                 TapGesture()
                     .onEnded { _ in
@@ -274,8 +333,16 @@ public struct MessageList: View {
                     conversationStore.clearConversationUnreadCount(conversationID, completion: nil)
                     if let targetID = locateMessage?.msgID {
                         scrollToTargetMessage(proxy: scrollProxy, targetID: targetID)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            isInitialScrollComplete = true
+                        }
                     } else {
-                        scrollToBottom(proxy: scrollProxy, animated: false)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            scrollToBottomImmediately(proxy: scrollProxy)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                isInitialScrollComplete = true
+                            }
+                        }
                     }
                 } else if messageListChangeReason == .fetchMoreMessages {
                     if let anchorId = anchorMessageId {
@@ -287,14 +354,16 @@ public struct MessageList: View {
                         anchorMessageId = nil
                     }
                 } else if messageListChangeReason == .sendMessage || messageListChangeReason == .recvMessage {
-                    scrollToBottom(proxy: scrollProxy, animated: true)
+                    if isInitialScrollComplete {
+                        scrollToBottom(proxy: scrollProxy, animated: true)
+                    }
                     if messageListChangeReason == .recvMessage {
                         conversationStore.clearConversationUnreadCount(conversationID, completion: nil)
                     }
                 }
             }
             .onReceive(keyboardHandler.$keyboardHeight) { keyboardHeight in
-                if keyboardHeight > 0 && isPageVisible {
+                if keyboardHeight > 0 && isPageVisible && isInitialScrollComplete {
                     scrollToBottom(proxy: scrollProxy, animated: true)
                 }
             }
@@ -302,7 +371,7 @@ public struct MessageList: View {
     }
 
     private var MessageMenuView: some View {
-        MessageActionView()
+        MessageActionView(config: config)
             .environmentObject(menuManager)
             .zIndex(1000)
             .onValueChange(of: menuManager.menuData.isShowing) { isShowing in
@@ -313,11 +382,9 @@ public struct MessageList: View {
     }
 
     private func scrollToTargetMessage(proxy: ScrollViewProxy, targetID: String) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        DispatchQueue.main.async {
             print("MessageListView: Executing scroll to target message")
-            withAnimation(.easeOut(duration: 0.3)) {
-                proxy.scrollTo(targetID, anchor: .center)
-            }
+            proxy.scrollTo(targetID, anchor: .center)
         }
     }
 
@@ -341,6 +408,7 @@ public struct MessageList: View {
                 case .failure(let error):
                     DispatchQueue.main.async {
                         self.isLoading = false
+                        self.isInitialScrollComplete = true
                         print("Failed to fetch messages with target: \(error.code), \(error.message)")
                     }
                 }
@@ -363,6 +431,7 @@ public struct MessageList: View {
             case .failure(let error):
                 DispatchQueue.main.async {
                     self.isLoading = false
+                    self.isInitialScrollComplete = true
                     print("Failed to fetch messages: \(error.code), \(error.message)")
                 }
             }
@@ -431,6 +500,11 @@ public struct MessageList: View {
                 proxy.scrollTo(lastMessage.id, anchor: .bottom)
             }
         }
+    }
+
+    private func scrollToBottomImmediately(proxy: ScrollViewProxy) {
+        guard let lastMessage = messageList.last else { return }
+        proxy.scrollTo(lastMessage.id, anchor: .bottom)
     }
 
     private func setupScrollDetection() {}

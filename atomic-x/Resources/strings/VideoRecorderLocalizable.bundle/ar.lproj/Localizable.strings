@@ -6,8 +6,9 @@
   
 */
 
-"record_tip" = "اضغط على الصورة ، اضغط على تسجيل طويل";
-"record_photo_tip" = "انقر على الصورة";
+"record_mode_mix_tip" = "اضغط على الصورة ، اضغط على تسجيل طويل";
+"record_mode_photo_tip" = "انقر على الصورة";
+"record_mode_video_tip" = "اضغط مطولاً لتسجيل";
 
 "flash" = "فلاش";
 "aspect" = "جوانب";

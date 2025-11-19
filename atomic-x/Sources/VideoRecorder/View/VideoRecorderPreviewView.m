@@ -2,7 +2,7 @@
 // Author: eddardliu
 
 #include "VideoRecorderPreviewView.h"
-#include "VideoRecorderConfig.h"
+#include "videoRecorderConfigInternal.h"
 #include "VideoRecorderCommon.h"
 #import <Masonry/Masonry.h>
 
@@ -231,7 +231,7 @@
         }];
     }
     
-    _btnSend.backgroundColor = [[VideoRecorderConfig sharedInstance] getThemeColor];
+    _btnSend.backgroundColor = [[VideoRecorderConfigInternal sharedInstance] getThemeColor];
     [_btnSend setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     _btnSend.layer.cornerRadius = 5;
     NSString* titile = [VideoRecorderCommon localizedStringForKey:@"send"];

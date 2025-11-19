@@ -9,7 +9,7 @@
 #import "VideoRecorderBeautifyView.h"
 #import "VideoRecorderCommon.h"
 #import "VideoRecorderControlView.h"
-#import "VideoRecorderConfig.h"
+#include "videoRecorderConfigInternal.h"
 #import "VideoRecorderEncodeConfig.h"
 #import "VideoRecorderAuthorizationPrompterController.h"
 #import "UGCReflectVideoRecordCore.h"
@@ -17,6 +17,8 @@
 #import "VideoRecorderBeautyManager.h"
 #import "VideoRecorderPreviewView.h"
 #import "VideoRecordSignatureChecker.h"
+
+#define MIXED_RECORD_MODE 0
 
 @interface VideoRecorderController () <VideoRecorderBeautifyViewDelegate, VideoRecorderCoreListener, VideoRecorderControlViewDelegate, VideoRecorderPreviewViewDelegate> {
     VideoRecordCore* _recordCore;
@@ -42,10 +44,10 @@
 
 - (instancetype)init {
     self = [super init];
-    _isUsingFrontCamera = [[VideoRecorderConfig sharedInstance] isDefaultFrontCamera];
-    _minDurationSeconds = [[VideoRecorderConfig sharedInstance] getMinRecordDurationMs] / 1000.0f;
-    _maxDurationSeconds = [[VideoRecorderConfig sharedInstance] getMaxRecordDurationMs] / 1000.0f;
-    _encodeConfig = [[VideoRecorderEncodeConfig alloc] initWithVideoQuality:[[VideoRecorderConfig sharedInstance] getVideoQuality]];
+    _isUsingFrontCamera = [[VideoRecorderConfigInternal sharedInstance] isDefaultFrontCamera];
+    _minDurationSeconds = [[VideoRecorderConfigInternal sharedInstance] getMinRecordDurationMs] / 1000.0f;
+    _maxDurationSeconds = [[VideoRecorderConfigInternal sharedInstance] getMaxRecordDurationMs] / 1000.0f;
+    _encodeConfig = [[VideoRecorderEncodeConfig alloc] initWithVideoQuality:[[VideoRecorderConfigInternal sharedInstance] getVideoQuality]];
     _settings = [[VideoRecorderBeautifySettings alloc] init];
     _zoom = 1.0;
     _recordForEdit = YES;
@@ -245,7 +247,7 @@
         return;
     }
     
-    if ([[VideoRecordSignatureChecker shareInstance] getSetSignatureResult] != ResultCodeSUCCESS) {
+    if ([[VideoRecordSignatureChecker shareInstance] getSetSignatureResult] != VIDEO_RECORD_SIGNATURE_SUCCESS) {
         [VideoRecorderAuthorizationPrompterController showPrompterDialogInViewController:self prompType:NoSignature];
         return;
     }
@@ -274,7 +276,9 @@
     }
 
     if (_recordDuration < _minDurationSeconds) {
-        [self takePhoto];
+        if ([[VideoRecorderConfigInternal sharedInstance] getRecordeMode] == MIXED_RECORD_MODE) {
+            [self takePhoto];
+        }
         return;
     }
 

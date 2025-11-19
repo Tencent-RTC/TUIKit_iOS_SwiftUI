@@ -7,7 +7,7 @@ import AtomicXCore
 import UIKit
 
 private struct MessageActionConfigProtocolKey: EnvironmentKey {
-    static let defaultValue: MessageActionConfigProtocol = ChatMessageStyle()
+    static let defaultValue: MessageActionConfigProtocol = ChatMessageListConfig()
 }
 
 extension EnvironmentValues {
@@ -68,6 +68,7 @@ struct MessageMenuData {
     var message: MessageInfo? = nil
     var messageBubbleFrame: CGRect = .zero
     var shouldShowAbove: Bool = true
+    var customActions: [MessageCustomAction] = []
 }
 
 enum MessageMenuConfig {
@@ -134,15 +135,6 @@ enum MenuButtonConfig {
                 menuManager.hideMenu()
             }
         ),
-        // ButtonConfig(
-        //     iconName: "quote_icon_figma",
-        //     systemIconFallback: "text.quote",
-        //     label: LocalizedChatString("Quote"),
-        //     shouldShow: { _ in true },
-        //     actionHandler: { _, menuManager, _ in
-        //         menuManager.hideMenu()
-        //     }
-        // ),
         ButtonConfig(
             iconName: "recall_icon_figma",
             systemIconFallback: "arrow.uturn.backward",
@@ -175,8 +167,8 @@ enum MenuButtonConfig {
         )
     ]
 
-    static func getVisibleButtons(for message: MessageInfo?, style: MessageActionConfigProtocol?) -> [ButtonConfig] {
-        return allButtons.filter { button in
+    static func getVisibleButtons(for message: MessageInfo?, style: MessageActionConfigProtocol?, customActions: [MessageCustomAction] = []) -> [ButtonConfig] {
+        var buttons = allButtons.filter { button in
             guard button.shouldShow(message) else { return false }
             switch button.label {
             case LocalizedChatString("Copy"):
@@ -192,6 +184,23 @@ enum MenuButtonConfig {
                 return true
             }
         }
+
+        let customButtons = customActions.map { customAction in
+            ButtonConfig(
+                iconName: customAction.iconName,
+                systemIconFallback: customAction.systemIconFallback,
+                label: customAction.title,
+                shouldShow: { _ in true },
+                actionHandler: { message, menuManager, _ in
+                    guard let message = message else { return }
+                    menuManager.hideMenu()
+                    customAction.action(message)
+                }
+            )
+        }
+
+        buttons.append(contentsOf: customButtons)
+        return buttons
     }
 }
 
@@ -199,17 +208,18 @@ class MessageMenuManager: ObservableObject {
     @Published var menuData = MessageMenuData()
     static let shared = MessageMenuManager()
 
-    func showMenu(for message: MessageInfo, bubbleFrame: CGRect) {
+    func showMenu(for message: MessageInfo, bubbleFrame: CGRect, customActions: [MessageCustomAction] = []) {
         let safeInsets = getSafeAreaInsets()
         let safeAreaTop = safeInsets.top
-        let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: ChatMessageStyle()).count
+        let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: ChatMessageListConfig(), customActions: customActions).count
         let dynamicMenuHeight = MessageMenuConfig.calculateMenuDimensions(buttonCount: buttonCount).height
         let hasEnoughSpaceAbove = bubbleFrame.minY - safeAreaTop >= dynamicMenuHeight + 40
         menuData = MessageMenuData(
             isShowing: true,
             message: message,
             messageBubbleFrame: bubbleFrame,
-            shouldShowAbove: hasEnoughSpaceAbove
+            shouldShowAbove: hasEnoughSpaceAbove,
+            customActions: customActions
         )
     }
 
@@ -234,17 +244,19 @@ func getSafeAreaInsets() -> UIEdgeInsets {
 
 struct MessageActionView: View {
     @EnvironmentObject var menuManager: MessageMenuManager
-    @Environment(\.MessageActionConfigProtocol) var style: MessageActionConfigProtocol
+    @Environment(\.messageCustomActions) var customActions: [MessageCustomAction]
     private var messageActionStore: MessageActionStore
+    private var config: MessageActionConfigProtocol
 
-    public init() {
+    public init(config: MessageActionConfigProtocol) {
         self.messageActionStore = MessageActionStore.create()
+        self.config = config
     }
 
     public var body: some View {
         if let message = menuManager.menuData.message,
            menuManager.menuData.isShowing,
-           MenuButtonConfig.getVisibleButtons(for: message, style: style).count > 0
+           MenuButtonConfig.getVisibleButtons(for: message, style: config, customActions: menuManager.menuData.customActions).count > 0
         {
             ZStack {
                 menuContent(message: message)
@@ -255,7 +267,7 @@ struct MessageActionView: View {
     }
 
     private func menuContent(message: MessageInfo) -> some View {
-        MenuPositionWrapper(message: message, menuManager: menuManager, messageActionStore: messageActionStore, style: style)
+        MenuPositionWrapper(message: message, menuManager: menuManager, messageActionStore: messageActionStore, style: config, customActions: menuManager.menuData.customActions)
     }
 
     public struct MenuPositionWrapper: View {
@@ -263,11 +275,14 @@ struct MessageActionView: View {
         @ObservedObject var menuManager: MessageMenuManager
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
-        public init(message: MessageInfo, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol) {
+        let customActions: [MessageCustomAction]
+
+        public init(message: MessageInfo, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol, customActions: [MessageCustomAction] = []) {
             self.message = message
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
+            self.customActions = customActions
         }
 
         public var body: some View {
@@ -275,7 +290,8 @@ struct MessageActionView: View {
                 message: message,
                 menuManager: menuManager,
                 messageActionStore: messageActionStore,
-                style: style
+                style: style,
+                customActions: customActions
             )
         }
     }
@@ -285,14 +301,17 @@ struct MessageActionView: View {
         @ObservedObject var menuManager: MessageMenuManager
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
+        let customActions: [MessageCustomAction]
         public var menuHeight: CGFloat { MessageMenuConfig.menuHeight }
         public var horizontalPadding: CGFloat { MessageMenuConfig.menuHorizontalPadding }
         public var safeSpacing: CGFloat { MessageMenuConfig.menuSafeSpacing }
-        public init(message: MessageInfo, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol) {
+
+        public init(message: MessageInfo, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol, customActions: [MessageCustomAction] = []) {
             self.message = message
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
+            self.customActions = customActions
         }
 
         public var body: some View {
@@ -307,14 +326,15 @@ struct MessageActionView: View {
                     showAbove: calculatedPosition.showAbove,
                     menuManager: menuManager,
                     messageActionStore: messageActionStore,
-                    style: style
+                    style: style,
+                    customActions: customActions
                 )
             }
             .edgesIgnoringSafeArea(.all)
         }
 
         public func calculateMenuPosition(screenGeometry: GeometryProxy) -> MenuPositionParams {
-            let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: style).count
+            let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: style, customActions: customActions).count
             let dimensions = MessageMenuConfig.calculateMenuDimensions(buttonCount: buttonCount)
             let menuWidth = dimensions.width
             let dynamicMenuHeight = dimensions.height
@@ -476,6 +496,8 @@ struct MessageActionView: View {
         @ObservedObject var menuManager: MessageMenuManager
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
+        let customActions: [MessageCustomAction]
+
         public init(
             x: CGFloat,
             y: CGFloat,
@@ -485,7 +507,8 @@ struct MessageActionView: View {
             showAbove: Bool,
             menuManager: MessageMenuManager,
             messageActionStore: MessageActionStore,
-            style: MessageActionConfigProtocol
+            style: MessageActionConfigProtocol,
+            customActions: [MessageCustomAction] = []
         ) {
             self.x = x
             self.y = y
@@ -496,6 +519,7 @@ struct MessageActionView: View {
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
+            self.customActions = customActions
         }
 
         public var body: some View {
@@ -511,7 +535,8 @@ struct MessageActionView: View {
                     showAbove: showAbove,
                     menuManager: menuManager,
                     messageActionStore: messageActionStore,
-                    style: style
+                    style: style,
+                    customActions: customActions
                 )
             }
             .frame(width: width, height: height)
@@ -683,13 +708,15 @@ struct MessageActionView: View {
         let showAbove: Bool
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
+        let customActions: [MessageCustomAction]
 
-        public init(width: CGFloat, showAbove: Bool, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol) {
+        public init(width: CGFloat, showAbove: Bool, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol, customActions: [MessageCustomAction] = []) {
             self.width = width
             self.showAbove = showAbove
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
+            self.customActions = customActions
         }
 
         public var body: some View {
@@ -701,7 +728,8 @@ struct MessageActionView: View {
                     width: width,
                     menuManager: menuManager,
                     messageActionStore: messageActionStore,
-                    style: style
+                    style: style,
+                    customActions: customActions
                 )
                 .padding(.top, MessageMenuConfig.menuContentTopPadding)
                 .padding(.bottom, MessageMenuConfig.menuContentBottomPadding)
@@ -723,16 +751,18 @@ struct MessageActionView: View {
         let width: CGFloat
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
+        let customActions: [MessageCustomAction]
 
-        public init(width: CGFloat, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol) {
+        public init(width: CGFloat, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol, customActions: [MessageCustomAction] = []) {
             self.width = width
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
+            self.customActions = customActions
         }
 
         private var buttonData: [ButtonConfig] {
-            return MenuButtonConfig.getVisibleButtons(for: menuManager.menuData.message, style: style)
+            return MenuButtonConfig.getVisibleButtons(for: menuManager.menuData.message, style: style, customActions: customActions)
         }
 
         public var body: some View {

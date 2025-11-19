@@ -10,11 +10,12 @@ internal class AudioRecorderSystem: AudioRecorderInternalProtocol {
     
     private var listener: AudioRecorderListener?
     private var recorder: AVAudioRecorder?
-    
+    private var minDurationMs : Int = 1000
+    private var maxDurationMs : Int = 60000
+
     private var recordTimer: Timer?
     private var currentPower: Int = 0
     private var currentTime: TimeInterval = 0
-    private var isEnableAIDeNoise:Bool = false
     
     private var recordSetting:[String: Any]
     
@@ -28,11 +29,9 @@ internal class AudioRecorderSystem: AudioRecorderInternalProtocol {
         ]
     }
     
-    func startRecord(_ path : String) {
-        if isEnableAIDeNoise {
-            listener?.onComplete(.errorUseAIDenoiseNoLiteavSDK);
-            return
-        }
+    func startRecord(_ path : String, _ minDuration: Int, _ maxDuration: Int) {
+        self.minDurationMs = minDuration
+        self.maxDurationMs = maxDuration
         
         let session = AVAudioSession.sharedInstance()
         do {
@@ -74,8 +73,10 @@ internal class AudioRecorderSystem: AudioRecorderInternalProtocol {
         recordTimer?.invalidate()
         recordTimer = nil
         
-        if Int(currentTime) * 1000 < AudioRecorderSystem.kMinDuration {
+        if Int(currentTime) * 1000 < minDurationMs {
             listener?.onComplete(.errorLessThanMinDuration)
+        } else if Int(currentTime) * 1000 > maxDurationMs {
+            listener?.onComplete(.exceedMaxDuration)
         } else {
             listener?.onComplete(.success)
         }
@@ -89,8 +90,14 @@ internal class AudioRecorderSystem: AudioRecorderInternalProtocol {
     }
     
     func enableAIDeNoise(_ enable : Bool) {
+        if (!enable) {
+            return;
+        }
+        
         logger.error("system audio record do not support ai de noise");
-        isEnableAIDeNoise = enable
+        #if DEBUG
+          WindowToastManager.shared.show(LocalizedChatString("AudioAuthorizationPrompter"), type: .warning, duration: 5)
+        #endif
     }
     
     @objc private func onRecordTimer() {
@@ -101,6 +108,10 @@ internal class AudioRecorderSystem: AudioRecorderInternalProtocol {
         if time > currentTime {
             currentTime = time
             listener?.onProgress(Int(time * 1000))
+        }
+        
+        if Int(time * 1000) > maxDurationMs {
+            stopRecord()
         }
         
         let power = recorder?.averagePower(forChannel: 0) ?? 0

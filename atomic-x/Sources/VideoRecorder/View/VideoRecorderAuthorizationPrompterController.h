@@ -11,6 +11,8 @@ typedef NS_ENUM(NSInteger, AuthorizationPrompterType) {
 };
 
 @interface VideoRecorderAuthorizationPrompterController : UIViewController
++ (Boolean) isHasSignature;
++ (Boolean) isHasLiteavProSdk;
 + (void) showPrompterDialogInViewController:(UIViewController *)presentingVC prompType:(AuthorizationPrompterType) prompType;
 @property (nonatomic) AuthorizationPrompterType prompType;
 @end

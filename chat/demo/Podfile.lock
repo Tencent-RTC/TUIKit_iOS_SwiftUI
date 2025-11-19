@@ -1,30 +1,30 @@
 PODS:
-  - AtomicX/Chat (3.4.0):
+  - AtomicX/Chat (3.5.0):
     - AtomicXCore
     - Kingfisher (~> 7.0)
     - Masonry
     - SnapKit
-  - AtomicXCore (3.4.0):
+  - AtomicXCore (3.5.0):
     - RTCRoomEngine/Professional (>= 3.4.0)
-  - ChatUIKit (3.4.0):
+  - ChatUIKit (3.5.0):
     - AtomicX/Chat
     - AtomicXCore
     - Kingfisher
     - Masonry
   - Kingfisher (7.12.0)
   - Masonry (1.1.0)
-  - RTCRoomEngine/Professional (3.4.0):
-    - TXIMSDK_Plus_iOS_XCFramework (>= 8.7.7201)
-    - TXLiteAVSDK_Professional (>= 12.8.0.19666)
+  - RTCRoomEngine/Professional (3.5.0):
+    - TXIMSDK_Plus_iOS_XCFramework (>= 8.4.6676)
+    - TXLiteAVSDK_Professional (>= 12.2.16956)
   - SnapKit (5.7.1)
-  - TXIMSDK_Plus_iOS_XCFramework (8.7.7201)
-  - TXLiteAVSDK_Professional (12.8.19666):
-    - TXLiteAVSDK_Professional/Professional (= 12.8.19666)
-  - TXLiteAVSDK_Professional/Professional (12.8.19666)
+  - TXIMSDK_Plus_iOS_XCFramework (8.7.7207)
+  - TXLiteAVSDK_Professional (12.9.20063):
+    - TXLiteAVSDK_Professional/Professional (= 12.9.20063)
+  - TXLiteAVSDK_Professional/Professional (12.9.20063)
 
 DEPENDENCIES:
   - AtomicX/Chat (from `../../atomic-x/AtomicX.podspec`)
-  - AtomicXCore (= 3.4.0)
+  - AtomicXCore (= 3.5.0)
   - ChatUIKit (from `../uikit/ChatUIKit.podspec`)
 
 SPEC REPOS:
@@ -44,16 +44,16 @@ EXTERNAL SOURCES:
     :path: "../uikit/ChatUIKit.podspec"
 
 SPEC CHECKSUMS:
-  AtomicX: 1a22ec1af5d8209ec8cca56b937b99a26547cb79
-  AtomicXCore: 8e9dc4ce5bc4c551f411ba3009b5bf8c4d05216d
-  ChatUIKit: 6a17993ab81e27a2236d1dfcafc5a792f8c2ce18
+  AtomicX: 6cabe63be8a4118fc51e3370542e665c5e02593b
+  AtomicXCore: 528f0e3ddb7f5ef8bbd8296deb593647735e4a4e
+  ChatUIKit: c33db111581d352e798a857e82cf004f2a591cc3
   Kingfisher: 53a10ea35051a436b5fb626ca2dd8f3144d755e9
   Masonry: 678fab65091a9290e40e2832a55e7ab731aad201
-  RTCRoomEngine: 3dbae333f38ed5f695184436d4791e5e52846f94
+  RTCRoomEngine: 57ad901da63907d7b1740f809139bcd11503a86d
   SnapKit: d612e99e678a2d3b95bf60b0705ed0a35c03484a
-  TXIMSDK_Plus_iOS_XCFramework: 3b435eae84c639f35ae8dc9c8b92c399a8b0a67f
-  TXLiteAVSDK_Professional: fab8ac9da64efa80bef81377b35530a791411a74
+  TXIMSDK_Plus_iOS_XCFramework: d08f4c0e8ab0a416bfa9b6dd401f5bc2d191d51e
+  TXLiteAVSDK_Professional: 46059af0eff3078277e5b3365b5192514fd0fc39
 
-PODFILE CHECKSUM: 480283dc3567ac06563a5c17c2edce51248537e8
+PODFILE CHECKSUM: bb3c27e2f77616d655f870b3c4ba4705b0c93262
 
 COCOAPODS: 1.16.2

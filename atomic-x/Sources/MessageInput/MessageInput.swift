@@ -31,7 +31,7 @@ private struct ViewHeightKey: PreferenceKey {
 }
 
 private struct MessageInputConfigProtocolKey: EnvironmentKey {
-    static let defaultValue: MessageInputConfigProtocol = ChatMessageInputStyle()
+    static let defaultValue: MessageInputConfigProtocol = ChatMessageInputConfig()
 }
 
 private extension EnvironmentValues {
@@ -43,7 +43,6 @@ private extension EnvironmentValues {
 
 public struct MessageInput: View {
     @EnvironmentObject var themeState: ThemeState
-    @Binding var text: String
     @State private var showingEmojiPicker = false
     @State private var showingQuickReplies = false
     @State private var textHeight: CGFloat = 40
@@ -53,24 +52,20 @@ public struct MessageInput: View {
     @State private var isShowingAudioRecorder = false
     private var messageInputStore: MessageInputStore
     private let conversationID: String
-    private let onHeightChange: (CGFloat) -> Void
-    private let inputStyle: MessageInputConfigProtocol
+    private let config: MessageInputConfigProtocol
 
-    public init(text: Binding<String>,
-                conversationID: String,
-                style: MessageInputConfigProtocol, onHeightChange: @escaping (CGFloat) -> Void)
-    {
-        self._text = text
+    public init(
+        conversationID: String,
+        config: MessageInputConfigProtocol = ChatMessageInputConfig()
+    ) {
         self.conversationID = conversationID
-        self.inputStyle = style
-        self.onHeightChange = onHeightChange
+        self.config = config
         self.messageInputStore = MessageInputStore.create(conversationID: conversationID)
     }
 
     public var body: some View {
         ZStack(alignment: .bottom) {
             MessageInputView(
-                text: $text,
                 messageInputStore: messageInputStore,
                 conversationID: conversationID,
                 isLongPressingState: $isLongPressingState,
@@ -82,9 +77,7 @@ public struct MessageInput: View {
                 GeometryReader { geo in
                     Color.clear
                         .preference(key: ViewHeightKey.self, value: geo.size.height)
-                        .onPreferenceChange(ViewHeightKey.self) { height in
-                            onHeightChange(height)
-                        }
+                        .onPreferenceChange(ViewHeightKey.self) { _ in }
                 }
             )
             .onPreferenceChange(InputStateKey.self) { state in
@@ -92,23 +85,21 @@ public struct MessageInput: View {
                 self.showingQuickReplies = state.isShowingQuickReplies
                 self.textHeight = state.textHeight
             }
-            .environment(\.MessageInputConfigProtocol, inputStyle)
+            .environment(\.MessageInputConfigProtocol, config)
             if isShowingAudioRecorder {
                 AudioRecorderView(
-                    shouldCancelRecording: $shouldCancelRecording,
-                    messageInputHeight: textHeight / 2,
-                    enableAIDeNoise: false,
-                    primary: themeState.currentPrimaryColor,
-                    onRecordingComplete: { resultCode, path, duration in
-                        print("audio recorde on recording complete. resultCode = \(resultCode) path = \(path) duration = \(duration)")
-                        if resultCode == AudioRecordResultCode.success {
+                    cancelRecording: $shouldCancelRecording,
+                    config: AudioRecorderViewConfig(
+                        primaryColor: themeState.currentPrimaryColor,
+                        backgroundColor: themeState.colors.bgColorOperate.hexString()
+                    ),
+                    onRecordingComplete: { path, duration in
+                        print("audio recorde on recording complete. path = \(path ?? "") duration = \(duration)")
+                        if let path = path {
                             let messageManager = MessageInputManager(messageInputStore: messageInputStore)
                             messageManager.sendVoiceMessage(path, duration: Int(duration))
                         }
                         isShowingAudioRecorder = false
-                    },
-                    onTimeLimitReached: {
-                        WindowToastManager.shared.show(LocalizedChatString("VoiceRecordTimeLimitReached"),type: .warning,duration: 5)
                     }
                 )
                 .frame(height: 100)
@@ -295,7 +286,6 @@ private struct FixedHeightTextEditor: UIViewRepresentable {
 
 private struct MessageInputView: View {
     @EnvironmentObject var themeState: ThemeState
-    @Binding var text: String
     @Binding var isLongPressingState: Bool
     @Binding var dragOffset: CGFloat
     @Binding var shouldCancelRecording: Bool
@@ -309,15 +299,14 @@ private struct MessageInputView: View {
     var onSendVoice: ((URL, Int) -> Void)? = nil
     private let messageManager: MessageInputManager
 
-    init(text: Binding<String>,
-         messageInputStore: MessageInputStore,
-         conversationID: String,
-         isLongPressingState: Binding<Bool>,
-         dragOffset: Binding<CGFloat>,
-         shouldCancelRecording: Binding<Bool>,
-         isShowingAudioRecorder: Binding<Bool>)
-    {
-        self._text = text
+    init(
+        messageInputStore: MessageInputStore,
+        conversationID: String,
+        isLongPressingState: Binding<Bool>,
+        dragOffset: Binding<CGFloat>,
+        shouldCancelRecording: Binding<Bool>,
+        isShowingAudioRecorder: Binding<Bool>
+    ) {
         self.messageInputStore = messageInputStore
         self.conversationID = conversationID
         self._isLongPressingState = isLongPressingState
@@ -366,30 +355,6 @@ private struct MessageInputView: View {
     var body: some View {
         ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
-                if isShowingQuickReplies {
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(quickReplies, id: \.self) { reply in
-                                Button(action: {
-                                    text = reply
-                                    isShowingQuickReplies = false
-                                }) {
-                                    Text(reply)
-                                        .font(.system(size: 14))
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 6)
-                                        .background(themeState.colors.buttonColorPrimaryDefault.opacity(0.1))
-                                        .foregroundColor(themeState.colors.buttonColorPrimaryDefault)
-                                        .cornerRadius(16)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 6)
-                    }
-                    .frame(height: 40)
-                    .background(themeState.colors.bgColorOperate)
-                }
                 InputBarArea
                 if isShowingEmojiPicker {
                     EmojiPicker { emojiData in
@@ -408,7 +373,7 @@ private struct MessageInputView: View {
             }
             .background(themeState.colors.bgColorOperate)
         }
-        .toast(self.messageManager.toastInstance)
+        .toast(messageManager.toastInstance)
         .animation(.easeInOut(duration: 0.2), value: isShowingQuickReplies)
         .animation(.easeInOut(duration: 0.2), value: isShowingEmojiPicker)
         .animation(.easeInOut(duration: 0.2), value: isShowingAudioRecorder)
@@ -417,15 +382,19 @@ private struct MessageInputView: View {
         .padding(.bottom, keyboardHandler.keyboardHeight > 0 ? keyboardHandler.keyboardHeight : 0)
         .animation(.easeOut(duration: 0.25), value: keyboardHandler.keyboardHeight)
         .fullScreenCover(isPresented: $isShowingPhotoTaker) {
-            VideoRecorderView(
-                config: VideoRecorderConfigBuilder(
+            VideoRecorder(
+                config: VideoRecorderConfig(
                     recordMode: .photoOnly,
                     primaryColor: themeState.currentPrimaryColor
                 )
-            ) { mediaURL, mediaType in
+            ) { mediaPath, mediaType in
                 var key = "lastTakenPhotoURL"
                 if mediaType == .video {
                     key = "lastRecordedVideoURL"
+                }
+                var mediaURL:URL?
+                if let mediaPath = mediaPath {
+                    mediaURL = URL(fileURLWithPath: mediaPath)
                 }
                 UserDefaults.standard.set(mediaURL, forKey: key)
             }
@@ -463,13 +432,17 @@ private struct MessageInputView: View {
             }
         }
         .fullScreenCover(isPresented: $isShowingVideoRecorder) {
-            VideoRecorderView(config: VideoRecorderConfigBuilder(
+            VideoRecorder(config: VideoRecorderConfig(
                 recordMode: .videoPhotoMix,
                 primaryColor: themeState.currentPrimaryColor
-            )) { mediaURL, mediaType in
+            )) { mediaPath, mediaType in
                 var key = "lastRecordedVideoURL"
                 if mediaType == .photo {
                     key = "lastTakenPhotoURL"
+                }
+                var mediaURL:URL?
+                if let mediaPath = mediaPath {
+                    mediaURL = URL(fileURLWithPath: mediaPath)
                 }
                 UserDefaults.standard.set(mediaURL, forKey: key)
             }
@@ -478,7 +451,7 @@ private struct MessageInputView: View {
                     UserDefaults.standard.removeObject(forKey: "lastRecordedVideoURL")
                     createThumbnailAndSendVideo(videoURL)
                 } else if let photoURL = UserDefaults.standard.url(forKey: "lastTakenPhotoURL") {
-                    UserDefaults.standard.removeObject(forKey: "lastTakenPhotoURL")                    
+                    UserDefaults.standard.removeObject(forKey: "lastTakenPhotoURL")
                     let fileExists = FileManager.default.fileExists(atPath: photoURL.path)
                     print(" File exists: \(fileExists)")
                     if let image = UIImage(contentsOfFile: photoURL.path) {
@@ -494,9 +467,7 @@ private struct MessageInputView: View {
                         } catch {
                             print(" Failed to load image data: \(error.localizedDescription)")
                         }
-                        
                     }
-
                 }
             }
         }
@@ -623,7 +594,7 @@ private struct MessageInputView: View {
                             .frame(width: 40, height: 40)
                     }
                     .simultaneousGesture(
-                        LongPressGesture(minimumDuration: 0.1)
+                        LongPressGesture(minimumDuration: 0.2)
                             .onEnded { _ in
                                 withAnimation(.easeInOut(duration: 0.2)) {
                                     isShowingEmojiPicker = false

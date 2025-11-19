@@ -16,18 +16,18 @@ public struct C2CChatSetting: View {
     @State private var userID: String = ""
     @State private var settingStore: C2CSettingStore
     @State private var conversationStore: ConversationListStore
-    private let showsOwnNavigation: Bool
     private let onSendMessageClick: (() -> Void)?
+    private let onContactDelete: (() -> Void)?
 
     public init(
         userID: String,
-        showsOwnNavigation: Bool,
-        onSendMessageClick: (() -> Void)? = nil
+        onSendMessageClick: (() -> Void)? = nil,
+        onContactDelete: (() -> Void)? = nil
     ) {
         self.userID = userID
         self.settingStore = C2CSettingStore.create(userID: userID)
-        self.showsOwnNavigation = showsOwnNavigation
         self.onSendMessageClick = onSendMessageClick
+        self.onContactDelete = onContactDelete
         self.conversationStore = ConversationListStore.create()
     }
 
@@ -87,26 +87,9 @@ public struct C2CChatSetting: View {
 
     public var body: some View {
         Group {
-            if showsOwnNavigation {
-                NavigationView {
-                    contentView
-                        .navigationBarTitle(LocalizedChatString("ProfileDetails"), displayMode: .inline)
-                        .navigationBarBackButtonHidden(true)
-                        .navigationBarItems(
-                            leading: Button(action: {
-                                presentationMode.wrappedValue.dismiss()
-                            }) {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(themeState.colors.textColorLink)
-                            }
-                        )
-                }
-            } else {
-                contentView
-                    .navigationBarTitle(LocalizedChatString("ProfileDetails"), displayMode: .inline)
-                    .toast(toast)
-            }
+            contentView
+                .navigationBarTitle(LocalizedChatString("ProfileDetails"), displayMode: .inline)
+                .toast(toast)
         }
         .sheet(isPresented: $showingRemarkEdit) {
             RemarkEditView(
@@ -324,15 +307,14 @@ public struct C2CChatSetting: View {
         settingStore.deleteFriend(completion: { result in
             switch result {
             case .success:
-                DispatchQueue.main.async {
-                    print("Successfully deleted friend")
-                    self.presentationMode.wrappedValue.dismiss()
-                }
+                print("Successfully deleted friend")
+                conversationStore.deleteConversation(ChatUtil.getC2CConversationID(userID), completion: nil)
             case .failure(let error):
-                DispatchQueue.main.async {
-                    print("Failed to delete friend: \(error.code) - \(error.message)")
-                    // TODO: Show error alert
-                }
+                print("Failed to delete friend: \(error.code) - \(error.message)")
+            }
+            DispatchQueue.main.async {
+                self.presentationMode.wrappedValue.dismiss()
+                self.onContactDelete?()
             }
         })
     }
@@ -341,15 +323,12 @@ public struct C2CChatSetting: View {
         conversationStore.clearConversationMessages(ChatUtil.getC2CConversationID(userID), completion: { result in
             switch result {
             case .success:
+                print("Successfully cleared chat history")
                 DispatchQueue.main.async {
-                    print("Successfully cleared chat history")
                     toast.simple(LocalizedChatString("ClearAllChatHistory"))
                 }
             case .failure(let error):
-                DispatchQueue.main.async {
-                    print("Failed to clear chat history: \(error.code) - \(error.message)")
-                    toast.simple("Failed to clear chat history")
-                }
+                print("Failed to clear chat history: \(error.code) - \(error.message)")
             }
         })
     }

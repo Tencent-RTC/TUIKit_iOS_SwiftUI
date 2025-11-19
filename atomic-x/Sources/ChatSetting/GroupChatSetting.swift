@@ -49,47 +49,31 @@ public struct GroupChatSetting: View {
     @State private var currentUserID: String = ""
     @State private var settingStore: GroupSettingStore
     @State private var conversationStore: ConversationListStore
-    private let showsOwnNavigation: Bool
     private let onSendMessageClick: (() -> Void)?
-    private let onPopToRoot: (() -> Void)?
+    private let onGroupDelete: (() -> Void)?
 
     private enum PermissionActionSheetType {
         case joinOption
         case inviteOption
     }
 
-    public init(groupID: String, showsOwnNavigation: Bool = true, onSendMessageClick: (() -> Void)? = nil, onPopToRoot: (() -> Void)? = nil) {
+    public init(
+        groupID: String,
+        onSendMessageClick: (() -> Void)? = nil,
+        onGroupDelete: (() -> Void)? = nil
+    ) {
         self.groupID = groupID
         self.settingStore = GroupSettingStore.create(groupID: groupID)
-        self.showsOwnNavigation = showsOwnNavigation
         self.onSendMessageClick = onSendMessageClick
-        self.onPopToRoot = onPopToRoot
+        self.onGroupDelete = onGroupDelete
         self.conversationStore = ConversationListStore.create()
     }
 
     public var body: some View {
         Group {
-            if showsOwnNavigation {
-                NavigationView {
-                    contentView
-                        .toast(toast)
-                        .navigationBarTitle(LocalizedChatString("ProfileDetails"), displayMode: .inline)
-                        .navigationBarBackButtonHidden(true)
-                        .navigationBarItems(
-                            leading: Button(action: {
-                                presentationMode.wrappedValue.dismiss()
-                            }) {
-                                Image(systemName: "chevron.left")
-                                    .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(themeState.colors.textColorLink)
-                            }
-                        )
-                }
-            } else {
-                contentView
-                    .toast(toast)
-                    .navigationBarTitle(LocalizedChatString("ProfileDetails"), displayMode: .inline)
-            }
+            contentView
+                .toast(toast)
+                .navigationBarTitle(LocalizedChatString("ProfileDetails"), displayMode: .inline)
         }
         .sheet(isPresented: $showingGroupNameEdit) {
             GroupNameEditSheet(
@@ -667,7 +651,7 @@ public struct GroupChatSetting: View {
             return LocalizedChatString("GroupProfileAutoApproval")
         }
     }
-    
+
     private func getJoinGroupDisplayName(_ option: GroupJoinOption) -> String {
         switch option {
         case .forbid:
@@ -790,13 +774,9 @@ public struct GroupChatSetting: View {
         conversationStore.clearConversationMessages(ChatUtil.getGroupConversationID(groupID), completion: { result in
             switch result {
             case .success:
-                DispatchQueue.main.async {
-                    toast.loading("清空聊天记录成功")
-                }
+                print("Clear history message succeeded")
             case .failure:
-                DispatchQueue.main.async {
-                    toast.error("清空聊天记录失败")
-                }
+                print("Clear history message failed")
             }
         })
     }
@@ -805,14 +785,14 @@ public struct GroupChatSetting: View {
         settingStore.quitGroup(completion: { result in
             switch result {
             case .success:
-                DispatchQueue.main.async {
-                    toast.simple("已退出群聊")
-                    self.popToRootView()
-                }
+                print("Quit group succeeded")
+                conversationStore.deleteConversation(ChatUtil.getGroupConversationID(groupID), completion: nil)
             case .failure:
-                DispatchQueue.main.async {
-                    toast.simple("退出群聊失败")
-                }
+                print("Quit group failed")
+            }
+            DispatchQueue.main.async {
+                self.onGroupDelete?()
+                self.presentationMode.wrappedValue.dismiss()
             }
         })
     }
@@ -821,27 +801,20 @@ public struct GroupChatSetting: View {
         settingStore.dismissGroup(completion: { result in
             switch result {
             case .success:
-                DispatchQueue.main.async {
-                    toast.simple("群聊已解散")
-                    self.popToRootView()
-                }
+                print("Dismiss group succeeded")
+                conversationStore.deleteConversation(ChatUtil.getGroupConversationID(groupID), completion: nil)
+
             case .failure:
-                DispatchQueue.main.async {
-                    toast.simple("解散群聊失败")
-                }
+                print("Dismiss group failed")
+            }
+            DispatchQueue.main.async {
+                self.onGroupDelete?()
+                self.presentationMode.wrappedValue.dismiss()
             }
         })
     }
 
     // MARK: - Helper Methods
-    
-    private func popToRootView() {
-        if let onPopToRoot = onPopToRoot {
-            onPopToRoot()
-        } else {
-            presentationMode.wrappedValue.dismiss()
-        }
-    }
 
     private func createGroupAvatarUrlList() -> [String] {
         return (1 ... 24).map { index in
@@ -909,11 +882,10 @@ private struct GroupMemberPreviewRow: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(themeState.colors.bgColorTopBar)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .disabled(!canViewDetails || isCurrentUser)
     }
-    .buttonStyle(PlainButtonStyle())
-    .disabled(!canViewDetails || isCurrentUser)
-}
-
 }
 
 // MARK: - Group Edit View (Simplified)
@@ -1410,7 +1382,6 @@ private struct MuteMemberSelectionView: View {
         }
     }
 
-
     private func muteMembers(_ selectedUsers: [UserPickerItem]) {
         var completedCount = 0
         var hasError = false
@@ -1485,7 +1456,6 @@ private struct MutedMemberRow: View {
         .padding(.vertical, 12)
         .background(themeState.colors.bgColorOperate)
     }
-
 }
 
 // MARK: - Group Notice Detail View
@@ -1586,7 +1556,7 @@ private struct AddGroupMemberView: View {
     @State private var friendList: [ContactInfo] = []
     let settingStore: GroupSettingStore
     @State private var contactStore: ContactListStore
-    
+
     init(settingStore: GroupSettingStore) {
         self.settingStore = settingStore
         self._contactStore = State(initialValue: ContactListStore.create())
@@ -1627,7 +1597,7 @@ private struct AddGroupMemberView: View {
         .onAppear {
             // Initialize with current data
             self.friendList = contactStore.state.value.friendList
-            
+
             // Fetch latest data
             contactStore.fetchFriendList(completion: { result in
                 switch result {
@@ -1710,8 +1680,8 @@ private struct GroupMemberListView: View {
                 }
             }
         )
-        .onAppear() {
-            settingStore.fetchGroupMemberList(role: .all, completion: { result in
+        .onAppear {
+            settingStore.fetchGroupMemberList(role: .all, completion: { _ in
             })
         }
         .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
@@ -1781,7 +1751,6 @@ private struct GroupMemberListView: View {
             permission: permission
         )
     }
-
 
     private func handleMemberDetail(_ member: GroupMember) {
         selectedMemberForDetail = member
@@ -1853,7 +1822,6 @@ private struct GroupMemberListRow: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
-
 }
 
 struct TransferOwnershipView: View {
@@ -1888,7 +1856,6 @@ struct TransferOwnershipView: View {
             self.allMembers = allMembers
         }
     }
-
 
     private func transferOwnership(_ selectedUsers: [UserPickerItem]) {
         guard let selectedUser = selectedUsers.first else {

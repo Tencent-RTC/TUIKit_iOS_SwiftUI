@@ -2,6 +2,7 @@
 // Author: eddardliu
 
 #import "VideoRecordSignatureChecker.h"
+#import "VideoRecorderReflectUtil.h"
 #import <objc/runtime.h>
 
 #define SCHEDULE_UPDATE_SIGNATURE_INTERVAL_WHEN_START  0.f
@@ -17,6 +18,7 @@
     
     NSString* _signature;
     NSInteger _expiredTime;
+    NSString* _sdkAppId;
     VideoRecordSignatureResultCode _resultCode;
     
     void (^_succ)(NSObject *result);
@@ -26,10 +28,6 @@
 @end
 
 @implementation VideoRecordSignatureChecker
-
-+ (void)load {
-    [[VideoRecordSignatureChecker shareInstance] startUpdateSignature];
-}
 
 + (instancetype)shareInstance {
     static id instance = nil;
@@ -45,56 +43,57 @@
     if (self) {
         _retryCount = 0;
         _expiredTime = 0;
-        _resultCode = ResultCodeERROR_NO_SIGNATURE;
+        _resultCode =     VIDEO_RECORD_SIGNATURE_ERROR_NO_SIGNATURE;
 
     }
     return self;
 }
 
-- (void)startUpdateSignature{
-    NSLog(@"TUIMultimediaSignatureChecker startUpdateSignature");
+- (void)startUpdateSignature :(NSString*)sdkAppId{
+    NSLog(@"VideoRecorderSignatureChecker startUpdateSignature");
     if (![self createGetSignatureInvocation]) {
-        _resultCode = ResultCodeERROR_NO_IM_SDK;
+        _resultCode =     VIDEO_RECORD_SIGNATURE_ERROR_NO_IM_SDK;
         return;
     }
-    
+    _sdkAppId = sdkAppId;
     [self scheduleUpdateSignature:SCHEDULE_UPDATE_SIGNATURE_INTERVAL_WHEN_START];
 }
 
-- (Boolean)setSignatureToSDK:(NSString*)sdkAppId {
+- (Boolean)setSignatureToSDK{
+    NSLog(@"setSignatureToSDK %@", _sdkAppId);
     if (_signature == nil || [_signature length] == 0) {
         return NO;
     }
     
-    if (sdkAppId == nil || [sdkAppId length] == 0) {
+    if (_sdkAppId == nil || [_sdkAppId length] == 0) {
         NSLog(@"sdk appid is empty");
-        _resultCode = ResultCodeERROR_APP_ID_EMPTY;
+        _resultCode =     VIDEO_RECORD_SIGNATURE_ERROR_APP_ID_EMPTY;
         return NO;
     }
     
     NSDictionary *param = @{
         @"api" : @"setSignature",
         @"params" : @{
-            @"appid" : sdkAppId,
+            @"appid" : _sdkAppId,
             @"signature" : _signature,
         },
     };
     NSError *error = nil;
     NSData *data = [NSJSONSerialization dataWithJSONObject:param options:0 error:&error];
     if (error != nil) {
-        NSLog(@"VideoRecordSignatureChecker GetMultimediaIsSupport Error:%@", error);
+        NSLog(@"VideoRecorderSignatureChecker GetMultimediaIsSupport Error:%@", error);
     }
     NSString *paramStr = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    NSLog(@"VideoRecordSignatureChecker: setSignature:%@", paramStr);
+    NSLog(@"VideoRecorderSignatureChecker: setSignature:%@", paramStr);
     
     if (![self setSignatureToUGCSdk:paramStr]) {
         NSLog(@"callExperimentalAPI: method is not available.");
-        _resultCode = ResultCodeERROR_NO_LITEAV_SDK;
+        _resultCode =         VIDEO_RECORD_SIGNATURE_ERROR_NO_LITEAV_SDK;
         return false;
     }
     
-    _resultCode = ResultCodeSUCCESS;
-    NSLog(@"VideoRecordSignatureChecker: set signature to sdk success");
+    _resultCode =         VIDEO_RECORD_SIGNATURE_SUCCESS;
+    NSLog(@"VideoRecorderSignatureChecker: set signature to sdk success");
     return true;
 }
 
@@ -103,15 +102,15 @@
 }
 
 - (void)updateSignatureIfNeed {
-    if ([NSDate.now timeIntervalSince1970] < _expiredTime && _resultCode == ResultCodeSUCCESS) {
+    if ([NSDate.now timeIntervalSince1970] < _expiredTime && _resultCode ==         VIDEO_RECORD_SIGNATURE_SUCCESS) {
         [self scheduleUpdateSignature:(_expiredTime - [NSDate.now timeIntervalSince1970]) *1000];
         return;
     }
-    _resultCode = ResultCodeERROR_NO_SIGNATURE;
+    _resultCode =     VIDEO_RECORD_SIGNATURE_ERROR_NO_SIGNATURE;
     
     if (getSignatureInvocation == nil) {
         NSLog(@"getSignatureInvocation is empty");
-        _resultCode = ResultCodeERROR_NO_IM_SDK;
+        _resultCode =     VIDEO_RECORD_SIGNATURE_ERROR_NO_IM_SDK;
         return;
     }
     
@@ -139,6 +138,9 @@
     self.retryCount = 0;
     self->_expiredTime = [expiredTime integerValue];
     self->_signature = signature;
+    
+    [self setSignatureToSDK];
+    
     NSLog(@"getVideoEditSignature: succeed. signature=%@, expiredTime=%@", self->_signature, @(self->_expiredTime));
     [self scheduleUpdateSignature:([expiredTime integerValue] -  [NSDate.now timeIntervalSince1970]) * 1000];
 }
@@ -176,86 +178,27 @@
 }
 
 - (Boolean) createGetSignatureInvocation {
-    Class V2TIMManagerClass = NSClassFromString(@"V2TIMManager");
-    if (!V2TIMManagerClass) {
-        NSLog(@"VideoRecordSignatureChecker can not find V2TIMManager");
+    id V2TIMManagerInstance = [VideoRecorderReflectUtil invokeStaticMethod:@"V2TIMManager" methodName:@"sharedInstance" withArguments:@[]];
+    
+    if (!V2TIMManagerInstance) {
+        NSLog(@"VideoRecorderSignatureChecker can not get V2TIMManager instance");
         return NO;
     }
     
-    SEL sharedInstanceSelector = NSSelectorFromString(@"sharedInstance");
-    if (![V2TIMManagerClass respondsToSelector:sharedInstanceSelector]) {
-        NSLog(@"VideoRecordSignatureChecker can not find V2TIMManager sharedInstance function");
-        return NO;
-    }
-    
-    NSMethodSignature *sharedInstanceSignature = [V2TIMManagerClass methodSignatureForSelector:sharedInstanceSelector];
-    NSInvocation *sharedInstanceInvocation = [NSInvocation invocationWithMethodSignature:sharedInstanceSignature];
-    sharedInstanceInvocation.target = V2TIMManagerClass;
-    sharedInstanceInvocation.selector = sharedInstanceSelector;
-    [sharedInstanceInvocation invoke];
-    
-    __unsafe_unretained id sharedInstance;
-    [sharedInstanceInvocation getReturnValue:&sharedInstance];
-    
-    if (!sharedInstance) {
-        NSLog(@"VideoRecordSignatureChecker can not get V2TIMManager instance");
-        return NO;
-    }
-    
-    SEL apiSelector = NSSelectorFromString(@"callExperimentalAPI:param:succ:fail:");
-    if (![sharedInstance respondsToSelector:apiSelector]) {
-        NSLog(@"VideoRecordSignatureChecker has not callExperimentalAPI:param:succ:fail:");
-        return NO;
-    }
-    
-    NSMethodSignature *methodSignature = [sharedInstance methodSignatureForSelector:apiSelector];
-    getSignatureInvocation = [NSInvocation invocationWithMethodSignature:methodSignature];
-    getSignatureInvocation.target = sharedInstance;
-    getSignatureInvocation.selector = apiSelector;
-    
-    NSString *apiName = @"getVideoEditSignature";
-    [getSignatureInvocation setArgument:&apiName atIndex:2];
-    
-    id param = nil;
-    [getSignatureInvocation setArgument:&param atIndex:3];
-    
-    _succ = ^(NSObject *result) {
+    NSString* param = @"signature";
+    id _succ = ^(NSObject *result) {
         [self onGetSignatureSucc:result];
     };
-    [getSignatureInvocation setArgument:&_succ atIndex:4];
-    
-    _fail = ^(int code, NSString *desc) {
+    id _fail = ^(int code, NSString *desc) {
         [self onGetSignatureFail:code desc:desc];
     };
-    [getSignatureInvocation setArgument:&_fail atIndex:5];
-    
+    [VideoRecorderReflectUtil invokeMethod:V2TIMManagerInstance methodName:@"callExperimentalAPI:param:succ:fail:" withArguments:@[@"getVideoEditSignature", param, _succ, _fail]];
     return YES;
 }
 
 - (Boolean) setSignatureToUGCSdk:(NSString *)param {
-    Class TXUGCBase = NSClassFromString(@"TXUGCBase");
-    if (TXUGCBase == nil) {
-        NSLog(@"VideoRecordSignatureChecker can not find class TXUGCBase");
-        return NO;
-    }
-    
-    SEL selector = NSSelectorFromString(@"callExperimentalAPI:");
-    if (![TXUGCBase respondsToSelector:selector]) {
-        NSLog(@"VideoRecordSignatureChecker TXUGCBase has not method callExperimentalAPI");
-        return NO;
-    }
-    NSMethodSignature *signature = [TXUGCBase methodSignatureForSelector:selector];
-    if (!signature) {
-        NSLog(@"VideoRecordSignatureChecker can not get method: %@", @"callExperimentalAPI");
-        return NO;
-    }
-    NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
-    invocation.target = TXUGCBase;
-    invocation.selector = selector;
-    
-    [invocation setArgument:&param atIndex:2];
-    [invocation invoke];
-    return  YES;
+    id result =  [VideoRecorderReflectUtil invokeStaticMethod:@"TXUGCBase" methodName:@"callExperimentalAPI:" withArguments:@[param]];
+    return result != nil;
 }
 
 @end

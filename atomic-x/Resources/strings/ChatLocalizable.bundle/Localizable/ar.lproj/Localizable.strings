@@ -745,7 +745,9 @@
 "QuickReplyThanks" = "شكرًا!";
 "QuickReplyReceived" = "تم الاستلام";
 "QuickReplyProcessing" = "جاري المعالجة";
-"VoiceRecordTimeLimitReached" = "لقد تم الوصول إلى الحد الزمني لتسجيل الصوت";
+"AudioRecordTimeLimitReached" = "لقد تم الوصول إلى الحد الزمني لتسجيل الصوت";
+"AudioRecorderLessThanMinTime" = "تسجيل الصوت طويل جدا و قصير جدا";
+"AudioAuthorizationPrompter" = “التكوين الحالي لا يمكن تمكين منظمة العفو الدولية للحد من الضوضاء . تصحيح الإصدارات فقط”;
 "ChooseMediaType" = "اختر نوع الوسائط";
 "SendMessage" = "Send a message";
 "AudioDownloadFailed" = "فشل تحميل الرسالة الصوتية";
