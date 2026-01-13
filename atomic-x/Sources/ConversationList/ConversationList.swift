@@ -41,20 +41,28 @@ public struct ConversationList: View {
 
     public var body: some View {
         List {
-            if #available(iOS 15.0, *) {
-                ForEach(conversationList) { conversation in
-                    conversationRow(for: conversation)
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            buildMoreActions(for: conversation)
+            ForEach(conversationList) { conversation in
+                conversationRow(for: conversation)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if config.isSupportMarkUnread {
+                            Button {
+                                if conversation.unreadCount > 0 || conversation.markList.contains(.unread) {
+                                    markConversationAsRead(conversation)
+                                } else {
+                                    markConversationAsUnread(conversation)
+                                }
+                            } label: {
+                                if conversation.unreadCount > 0 || conversation.markList.contains(.unread) {
+                                    Text(LocalizedChatString("MarkAsRead"))
+                                } else {
+                                    Text(LocalizedChatString("MarkAsUnRead"))
+                                }
+                            }
+                            .tint(themeState.colors.textColorLink)
                         }
-                }
-            } else {
-                ForEach(conversationList) { conversation in
-                    conversationRow(for: conversation)
-                        .contextMenu {
-                            buildMoreActions(for: conversation)
-                        }
-                }
+
+                        buildMoreActions(for: conversation)
+                    }
             }
         }
         .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \ConversationListState.conversationList)).dropFirst()) { conversationList in
@@ -109,25 +117,38 @@ public struct ConversationList: View {
     @ViewBuilder
     private func buildMoreActions(for conversation: ConversationInfo) -> some View {
         if config.isSupportDelete || config.isSupportPin || config.isSupportClearHistory || !customActions.isEmpty {
-            if #available(iOS 15.0, *) {
-                Button(LocalizedChatString("More"), action: {
-                    selectedConversation = conversation
-                    showingActionSheet = true
-                })
-                .tint(.blue)
+            Button(LocalizedChatString("More"), action: {
+                selectedConversation = conversation
+                showingActionSheet = true
+            })
+            .tint(themeState.colors.textColorAntiPrimary)
+        }
+    }
+
+    @ViewBuilder
+    private func buildContextMenuActions(for conversation: ConversationInfo) -> some View {
+        if config.isSupportMarkUnread {
+            if conversation.unreadCount > 0 || conversation.markList.contains(.unread) {
+                Button(action: {
+                    markConversationAsRead(conversation)
+                }) {
+                    Text(LocalizedChatString("MarkAsRead"))
+                }
             } else {
                 Button(action: {
-                    selectedConversation = conversation
-                    showingActionSheet = true
+                    markConversationAsUnread(conversation)
                 }) {
-                    Label(LocalizedChatString("More"), systemImage: "ellipsis")
+                    Text(LocalizedChatString("MarkAsUnRead"))
                 }
             }
         }
+
+        buildMoreActions(for: conversation)
     }
 
     private func buildActionSheetButtons() -> [ActionSheet.Button] {
         var buttons: [ActionSheet.Button] = []
+
         if config.isSupportPin {
             if selectedConversation?.isPinned == true {
                 buttons.append(.default(Text(LocalizedChatString("UnPin"))) {
@@ -199,14 +220,16 @@ public struct ConversationList: View {
 
     private func clearConversationUnreadCount(_ conversation: ConversationInfo) {
         store.clearConversationUnreadCount(conversation.conversationID, completion: nil)
+        store.markConversation([conversation.conversationID], markType: .unread, enable: false, completion: nil)
     }
 
     private func markConversationAsRead(_ conversation: ConversationInfo) {
         store.clearConversationUnreadCount(conversation.conversationID, completion: nil)
+        store.markConversation([conversation.conversationID], markType: .unread, enable: false, completion: nil)
     }
 
     private func markConversationAsUnread(_ conversation: ConversationInfo) {
-        store.markConversationUnread(conversation.conversationID, unread: true, completion: nil)
+        store.markConversation([conversation.conversationID], markType: .unread, enable: true, completion: nil)
     }
 }
 
@@ -224,7 +247,7 @@ private struct ConversationCell: View {
                     name: conversation.title,
                     size: .m
                 )
-                if conversation.receiveOption == .notNotify && conversation.unreadCount > 0 {
+                if conversation.receiveOption == .notNotify && (conversation.unreadCount > 0 || conversation.markList.contains(.unread)) {
                     Circle()
                         .fill(themeState.colors.textColorError)
                         .frame(width: 8, height: 8)
@@ -235,21 +258,25 @@ private struct ConversationCell: View {
                 HStack(alignment: .center) {
                     TitleLabel(size: .s, text: conversation.title ?? "")
                     Spacer()
-                    if conversation.receiveOption == .notNotify && conversation.groupType != GroupType.meeting {
+                    if conversation.receiveOption == .notNotify {
                         Image(systemName: "bell.slash.fill")
                             .font(.system(size: 14))
                             .foregroundColor(themeState.colors.textColorSecondary)
                     } else {
-                        if conversation.unreadCount > 0 {
-                            Badge(text: "\(conversation.unreadCount)", type: .text)
+                        if conversation.unreadCount > 0 || conversation.markList.contains(.unread) {
+                            if conversation.unreadCount > 0 {
+                                Badge(text: "\(conversation.unreadCount)", type: .text)
+                            } else {
+                                Badge(text: "1", type: .text)
+                            }
                         }
                     }
                 }
                 HStack(alignment: .center) {
                     let subtitle = MessageListHelper.getMessageAbstract(conversation.lastMessage)
-                    let finalText = buildFinalText(subtitle: subtitle, conversation: conversation)
 
-                    SubTitleLabel(size: .s, text: finalText)
+                    buildSubtitleView(subtitle: subtitle, conversation: conversation)
+
                     Spacer()
                     HStack(spacing: 4) {
                         if conversation.timestamp > 0 {
@@ -268,29 +295,111 @@ private struct ConversationCell: View {
         .padding(.vertical, 11)
     }
 
+    @ViewBuilder
+    private func buildSubtitleView(subtitle: String, conversation: ConversationInfo) -> some View {
+        let countUnit = LocalizedChatString("MessageCount")
+        let font = themeState.fonts.caption3Regular
+        let atTagText = buildAtTagText(conversation: conversation)
+
+        // Check if there's a draft - if so, prioritize showing the draft
+        if let draft = conversation.draft, !draft.isEmpty {
+            let draftLabel = LocalizedChatString("MessageTypeDraftFormat")
+            let draftContent = EmojiManager.shared.createLocalizedStringFromEmojiCodes(draft)
+
+            // Build the text with red draft label and @ tag
+            Group {
+                if conversation.receiveOption == .notNotify && conversation.unreadCount >= 2 {
+                    (Text("[\(conversation.unreadCount)\(countUnit)]")
+                        .foregroundColor(themeState.colors.textColorSecondary) +
+                        Text(atTagText)
+                        .foregroundColor(themeState.colors.textColorError) +
+                        Text(draftLabel)
+                        .foregroundColor(themeState.colors.textColorError) +
+                        Text(draftContent)
+                        .foregroundColor(themeState.colors.textColorSecondary))
+                        .font(font)
+                        .lineLimit(1)
+                } else {
+                    (Text(atTagText)
+                        .foregroundColor(themeState.colors.textColorError) +
+                        Text(draftLabel)
+                        .foregroundColor(themeState.colors.textColorError) +
+                        Text(draftContent)
+                        .foregroundColor(themeState.colors.textColorSecondary))
+                        .font(font)
+                        .lineLimit(1)
+                }
+            }
+        } else {
+            // No draft - check for @ tag
+            let finalText = buildFinalText(subtitle: subtitle, conversation: conversation)
+
+            if !atTagText.isEmpty {
+                // Show @ tag in red before the message
+                (Text(atTagText)
+                    .foregroundColor(themeState.colors.textColorError) +
+                    Text(finalText)
+                    .foregroundColor(themeState.colors.textColorSecondary))
+                    .font(font)
+                    .lineLimit(1)
+            } else {
+                SubTitleLabel(size: .s, text: finalText)
+            }
+        }
+    }
+
+    /// Build @ tag text based on groupAtInfoList
+    private func buildAtTagText(conversation: ConversationInfo) -> String {
+        // Only show @ tag for group chats with unread messages
+        guard conversation.unreadCount > 0,
+              conversation.conversationID.hasPrefix("group_"),
+              let atInfoList = conversation.groupAtInfoList,
+              !atInfoList.isEmpty
+        else {
+            return ""
+        }
+
+        var hasAtAll = false
+        var hasAtMe = false
+
+        for atInfo in atInfoList {
+            switch atInfo.atType {
+            case .atMe:
+                hasAtMe = true
+            case .atAll:
+                hasAtAll = true
+            case .atAllAtMe:
+                hasAtAll = true
+                hasAtMe = true
+            }
+        }
+
+        var result = ""
+        if hasAtAll {
+            result += LocalizedChatString("MentionAtAllTag")
+        }
+        if hasAtMe {
+            result += LocalizedChatString("MentionAtMeTag")
+        }
+        return result
+    }
+
     private func buildFinalText(subtitle: String, conversation: ConversationInfo) -> String {
         let countUnit = LocalizedChatString("MessageCount")
 
-        if subtitle.contains("@") {
-            let baseText = "@\(subtitle.dropFirst(1))"
-            if conversation.receiveOption == .notNotify && conversation.unreadCount > 0 {
-                return "[\(conversation.unreadCount)\(countUnit)] \(baseText)"
-            } else {
-                return baseText
-            }
-        } else if subtitle.contains("\(LocalizedChatString("You")):") {
-            if conversation.receiveOption == .notNotify && conversation.unreadCount > 0 {
-                return "[\(conversation.unreadCount)\(countUnit)] \(subtitle)"
-            } else {
-                return subtitle
-            }
+        // Process text with emoji codes
+        let processedText: String
+        if subtitle.contains("\(LocalizedChatString("You")):") {
+            // "You:" prefix doesn't need emoji processing
+            processedText = subtitle
         } else {
-            let processedText = EmojiManager.shared.createLocalizedStringFromEmojiCodes(subtitle)
-            if conversation.receiveOption == .notNotify && conversation.unreadCount > 0 {
-                return "[\(conversation.unreadCount)\(countUnit)] \(processedText)"
-            } else {
-                return processedText
-            }
+            processedText = EmojiManager.shared.createLocalizedStringFromEmojiCodes(subtitle)
+        }
+
+        if conversation.receiveOption == .notNotify && conversation.unreadCount >= 2 {
+            return "[\(conversation.unreadCount)\(countUnit)] \(processedText)"
+        } else {
+            return processedText
         }
     }
 }
@@ -305,16 +414,8 @@ private struct RefreshableModifier: ViewModifier {
     @State private var isRefreshing = false
 
     func body(content: Content) -> some View {
-        if #available(iOS 15.0, *) {
-            content.refreshable {
-                action()
-            }
-        } else {
-            content
-                .pullToRefresh(isRefreshing: $isRefreshing) {
-                    isRefreshing = true
-                    action()
-                }
+        content.refreshable {
+            action()
         }
     }
 }
@@ -322,11 +423,7 @@ private struct RefreshableModifier: ViewModifier {
 private struct ListRowSeparatorModifier: ViewModifier {
     let visibility: ListRowSeparatorVisibility
     func body(content: Content) -> some View {
-        if #available(iOS 15.0, *) {
-            content.listRowSeparator(visibility == .hidden ? .hidden : .visible)
-        } else {
-            content
-        }
+        content.listRowSeparator(visibility == .hidden ? .hidden : .visible)
     }
 }
 

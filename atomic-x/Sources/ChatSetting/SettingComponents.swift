@@ -331,7 +331,10 @@ public struct AvatarSelector: View {
                 .padding(.top, 10)
             Spacer()
         }
-        .background(Color(.systemBackground))
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
         .navigationBarTitle(LocalizedChatString("ChooseAvatar"), displayMode: .inline)
         .navigationBarBackButtonHidden(true)
         .navigationBarItems(

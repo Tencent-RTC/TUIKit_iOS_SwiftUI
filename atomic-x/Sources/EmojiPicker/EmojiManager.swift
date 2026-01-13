@@ -106,8 +106,12 @@ public class EmojiManager {
                let imagePath = emojiData.path,
                let image = EmojiCache.shared.getImageFromCache(imagePath)
             {
-                let attachment = NSTextAttachment()
+                // Use EmojiTextAttachment instead of NSTextAttachment to preserve emojiTag
+                let attachment = EmojiTextAttachment()
                 attachment.image = image
+                attachment.emojiTag = emojiCode
+                attachment.faceCellData = emojiData
+                attachment.emojiSize = defaultEmojiSize
                 attachment.bounds = CGRect(x: 0, y: -4, width: 20, height: 20)
                 let imageString = NSAttributedString(attachment: attachment)
                 attributedString.append(imageString)
@@ -170,3 +174,4 @@ extension EmojiManager {
         userDefaults.set(list, forKey: EmojiManager.kRecentEmojiKey)
     }
 }
+    

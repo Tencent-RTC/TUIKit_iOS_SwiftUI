@@ -1,25 +1,44 @@
 import AtomicXCore
 import AVFoundation
-import ImSDK_Plus
 import QuickLook
 import SwiftUI
+
+/// Display mode for MessageView
+enum MessageDisplayMode {
+    case normal // Normal chat list mode
+    case merged // Merged message detail mode (all messages left-aligned with avatar)
+}
 
 struct MessageView: View {
     @EnvironmentObject private var menuManager: MessageMenuManager
     @EnvironmentObject var themeState: ThemeState
+    @EnvironmentObject private var multiSelectManager: MultiSelectManager
     @Environment(\.messageListConfigProtocol) var config: MessageListConfigProtocol
     @Environment(\.locateMessageID) private var locateMessageID: String?
+    @Environment(\.toggleMessageSelection) private var toggleMessageSelection: ((MessageInfo) -> Void)?
     @StateObject private var imageViewerManager: ImageViewerManager
     @State private var isShowingEditView = false
     @State private var longPressed = false
     @State private var messageBubbleFrame: CGRect = .zero
+    @State private var showReactionDetail = false
 
     @State private var messageInputStore: MessageInputStore?
     let message: MessageInfo
     let onUserClick: ((String) -> Void)?
     let parentMessageList: [MessageInfo]
+    let displayMode: MessageDisplayMode
     private var messageListStore: MessageListStore
     private var audioPlayer: AudioPlayer
+    private var audioPlaybackManager: AudioPlaybackManager
+
+    private var isSelected: Bool {
+        guard let msgID = message.msgID else { return false }
+        return multiSelectManager.selectedMessageIDs.contains(msgID)
+    }
+
+    private var isMultiSelectMode: Bool {
+        return multiSelectManager.isMultiSelectMode
+    }
 
     private func shouldHighlightMessage(_ message: MessageInfo) -> Bool {
         let shouldHighlight = locateMessageID == message.id
@@ -27,6 +46,10 @@ struct MessageView: View {
     }
 
     var isLeft: Bool {
+        // In merged mode, all messages are left-aligned
+        if displayMode == .merged {
+            return true
+        }
         switch config.alignment {
         case 1:
             return true
@@ -37,12 +60,22 @@ struct MessageView: View {
         }
     }
 
-    init(message: MessageInfo, messageListStore: MessageListStore, conversationID: String, audioPlayer: AudioPlayer, onUserClick: ((String) -> Void)? = nil, parentMessageList: [MessageInfo]) {
+    /// Whether to show avatar (in merged mode, always show)
+    private var shouldShowAvatar: Bool {
+        if displayMode == .merged {
+            return true
+        }
+        return isLeft ? config.isShowLeftAvatar : config.isShowRightAvatar
+    }
+
+    init(message: MessageInfo, messageListStore: MessageListStore, conversationID: String, audioPlayer: AudioPlayer, audioPlaybackManager: AudioPlaybackManager = AudioPlaybackManager(), onUserClick: ((String) -> Void)? = nil, parentMessageList: [MessageInfo], displayMode: MessageDisplayMode = .normal) {
         self.message = message
         self.messageListStore = messageListStore
         self.onUserClick = onUserClick
         self.audioPlayer = audioPlayer
+        self.audioPlaybackManager = audioPlaybackManager
         self.parentMessageList = parentMessageList
+        self.displayMode = displayMode
         self._messageInputStore = State(initialValue: nil)
         self._imageViewerManager = StateObject(wrappedValue: ImageViewerManager(
             conversationID: conversationID,
@@ -128,9 +161,18 @@ struct MessageView: View {
         Group {
             if isLeft {
                 HStack(alignment: .top, spacing: 0) {
-                    userAvatar(isShow: config.isShowLeftAvatar, isRight: false)
+                    // Checkbox in multi-select mode (left message)
+                    if isMultiSelectMode {
+                        MessageCheckBox(isSelected: isSelected)
+                            .padding(.trailing, 8)
+                            .onTapGesture {
+                                toggleMessageSelection?(message)
+                            }
+                    }
+
+                    userAvatar(isShow: shouldShowAvatar, isRight: false)
                     HStack(alignment: .top, spacing: 0) {
-                        if config.isShowLeftNickname, let sender = message.sender, !sender.isEmpty {
+                        if config.isShowLeftNickname, let sender = message.sender.nickname, !sender.isEmpty {
                             nicknameView(sender: sender)
                         }
                         messageContent(alignment: .leading)
@@ -139,12 +181,23 @@ struct MessageView: View {
                 }
             } else {
                 HStack(alignment: .top, spacing: 0) {
+                    // Checkbox in multi-select mode (right message - also at leading position)
+                    if isMultiSelectMode {
+                        MessageCheckBox(isSelected: isSelected)
+                            .padding(.trailing, 8)
+                            .onTapGesture {
+                                toggleMessageSelection?(message)
+                            }
+                    }
+
                     Spacer(minLength: config.horizontalPadding)
-                    if config.isShowRightNickname && message.sender?.count != 0 {
-                        nicknameView(sender: message.sender!)
+                    if config.isShowRightNickname {
+                        if let sender = message.sender.nickname, !sender.isEmpty {
+                            nicknameView(sender: sender)
+                        }
                     }
                     messageContent(alignment: .trailing)
-                    userAvatar(isShow: config.isShowRightAvatar, isRight: true)
+                    userAvatar(isShow: shouldShowAvatar, isRight: true)
                 }
             }
         }
@@ -152,19 +205,38 @@ struct MessageView: View {
         .padding(.vertical, 4)
         .padding(.vertical, 2)
         .frame(maxWidth: .infinity, alignment: isLeft ? .leading : .trailing)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            if isMultiSelectMode {
+                toggleMessageSelection?(message)
+            }
+        }
     }
 
     private func userAvatar(isShow: Bool, isRight: Bool) -> some View {
         Group {
             if isShow {
-                Avatar(url: message.rawMessage?.faceURL, name: message.rawMessage?.nickName)
+                Avatar(url: message.sender.avatarURL ?? "", name: message.sender.nickname ?? "")
                     .frame(width: 36, height: 36)
                     .padding(isRight ? .leading : .trailing, config.avatarSpacing)
                     .contentShape(Rectangle())
                     .scaleEffect(message.isSelf ? 1.0 : 1.0)
                     .onTapGesture {
                         if !message.isSelf {
-                            onUserClick?(message.sender ?? "")
+                            onUserClick?(message.sender.userID)
+                        }
+                    }
+                    .onLongPressGesture {
+                        // Long press to trigger mention user
+                        if !message.isSelf {
+                            NotificationCenter.default.post(
+                                name: NSNotification.Name("mentionUserNotification"),
+                                object: nil,
+                                userInfo: [
+                                    "userID": message.sender.userID,
+                                    "nickname": message.sender.nickname ?? ""
+                                ]
+                            )
                         }
                     }
             }
@@ -187,7 +259,7 @@ struct MessageView: View {
             .onTapGesture {
                 print("MessageView: Send fail icon tapped")
                 WindowAlertManager.shared.showAlert(
-                    message: LocalizedChatString("TipsConfirmResendMessage"),
+                    title: LocalizedChatString("TipsConfirmResendMessage"),
                     cancelText: LocalizedChatString("Cancel"),
                     confirmText: LocalizedChatString("Confirm"),
                     onConfirm: {
@@ -205,30 +277,128 @@ struct MessageView: View {
             .padding(.bottom, 2)
     }
 
+    // Violation message icon (no tap action, no popup)
+    private var violationIcon: some View {
+        Image(systemName: "exclamationmark.circle.fill")
+            .font(.system(size: 16))
+            .foregroundColor(themeState.colors.textColorError)
+            .padding(.bottom, 2)
+    }
+
+    // Violation message hint text
+    private var violationHintText: some View {
+        Text(LocalizedChatString("MessageTypeSecurityStrikeInfo"))
+            .font(.system(size: 12))
+            .foregroundColor(themeState.colors.textColorError)
+    }
+
     private func messageContent(alignment: HorizontalAlignment) -> some View {
-        VStack(alignment: alignment, spacing: 2) {
+        VStack(alignment: alignment, spacing: 4) {
             HStack(alignment: .bottom, spacing: 4) {
                 if message.isSelf && message.status == .sendFail {
                     sendFailIcon
+                } else if message.isSelf && message.status == .violation {
+                    violationIcon
                 } else if message.isSelf && message.status == .sending {
                     sendingLoadingIcon
                 }
 
-                VStack(alignment: message.isSelf ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: isLeft ? .leading : .trailing, spacing: 4) {
                     messageContentBody
                         .opacity(message.status == .sending ? 0.7 : 1.0)
+
+                    // Message Reaction Bar
+                    if config.isSupportReaction && !message.reactionList.isEmpty {
+                        MessageReactionBar(
+                            reactionList: message.reactionList,
+                            isLeft: isLeft,
+                            onClick: {
+                                showReactionDetail = true
+                            }
+                        )
+                        .environmentObject(themeState)
+                    }
                 }
                 .scaleEffect(longPressed ? 0.97 : 1.0)
                 .animation(.spring(response: 0.3), value: longPressed)
 
                 if !message.isSelf && message.status == .sendFail {
                     sendFailIcon
+                } else if !message.isSelf && message.status == .violation {
+                    violationIcon
                 } else if !message.isSelf && message.status == .sending {
                     sendingLoadingIcon
                 }
             }
+
+            // Violation hint text below the bubble (outside HStack, aligned with bubble)
+            if message.status == .violation {
+                violationHintText
+            }
         }
         .fixedSize(horizontal: false, vertical: true)
+        .sheet(isPresented: $showReactionDetail) {
+            if config.isSupportReaction && !message.reactionList.isEmpty {
+                let actionStore = MessageActionStore.create(
+                    message: message
+                )
+                ReactionDetailSheet(
+                    reactionList: message.reactionList,
+                    currentUserID: LoginStore.shared.state.value.loginUserInfo?.userID ?? "",
+                    onFetchUsers: { reactionID in
+                        actionStore.fetchMessageReactionUsers(
+                            reactionID: reactionID,
+                            count: 100,
+                            completion: nil
+                        )
+                    },
+                    onRemoveReaction: { reactionID in
+                        actionStore.removeMessageReaction(
+                            reactionID: reactionID,
+                            completion: { result in
+                                DispatchQueue.main.async {
+                                    let message: String
+                                    switch result {
+                                    case .success:
+                                        message = "Remove reaction success"
+                                    case .failure(let error):
+                                        print(">>>>> removeMessageReaction failed: \(error.code), \(error.message)")
+                                        message = "Remove reaction failed: \(error.message)"
+                                    }
+                                    // Show alert on the topmost presented view controller (sheet)
+                                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                                       let rootVC = windowScene.windows.first?.rootViewController
+                                    {
+                                        var topVC = rootVC
+                                        while let presented = topVC.presentedViewController {
+                                            topVC = presented
+                                        }
+                                        let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
+                                        alert.addAction(UIAlertAction(title: "OK", style: .default))
+                                        topVC.present(alert, animated: true)
+                                    }
+                                }
+                            }
+                        )
+                    }
+                )
+                .environmentObject(themeState)
+                .bottomSheet()
+            }
+        }
+        .onChange(of: message.reactionList.isEmpty) { isEmpty in
+            if isEmpty {
+                // Auto-dismiss sheet when all reactions are removed
+                showReactionDetail = false
+            } else {
+                // Reaction bar appeared, notify to scroll
+                NotificationCenter.default.post(
+                    name: NSNotification.Name("reactionBarAppeared"),
+                    object: nil,
+                    userInfo: ["msgID": message.msgID ?? ""]
+                )
+            }
+        }
     }
 
     private func systemMessageView(_ messageBody: MessageBody) -> some View {
@@ -294,9 +464,13 @@ struct MessageView: View {
         Group {
             if let messageBody = message.messageBody {
                 switch message.messageType {
+                case .merged:
+                    MergeMessageView(message: message)
+                        .allowsHitTesting(!isMultiSelectMode)
                 case .text:
                     TextMessageView(
                         messageBody: messageBody,
+                        message: message,
                         isLeft: isLeft,
                         isSelf: message.isSelf,
                         shouldHighlight: shouldHighlightMessage(message)
@@ -308,6 +482,7 @@ struct MessageView: View {
                         messageListStore: messageListStore,
                         onImageTap: imageViewerManager.showImageViewerIfAvailable
                     )
+                    .allowsHitTesting(!isMultiSelectMode)
                 case .video:
                     VideoMessageView(
                         messageBody: messageBody,
@@ -322,7 +497,12 @@ struct MessageView: View {
                                     width: 1920,
                                     height: 1080
                                 )
-                                VideoPlayer.shared.play(videoData: videoData)
+                                // Use UIKit presentation in merged detail view to avoid dismissing the sheet
+                                if displayMode == .merged {
+                                    VideoPlayer.shared.playWithUIKit(videoData: videoData)
+                                } else {
+                                    VideoPlayer.shared.play(videoData: videoData)
+                                }
                             } else {
                                 messageListStore.downloadMessageResource(message, resourceType: .video, completion: { result in
                                     switch result {
@@ -335,7 +515,12 @@ struct MessageView: View {
                                                     width: 1920,
                                                     height: 1080
                                                 )
-                                                VideoPlayer.shared.play(videoData: videoData)
+                                                // Use UIKit presentation in merged detail view to avoid dismissing the sheet
+                                                if displayMode == .merged {
+                                                    VideoPlayer.shared.playWithUIKit(videoData: videoData)
+                                                } else {
+                                                    VideoPlayer.shared.play(videoData: videoData)
+                                                }
                                             }
                                         }
                                     case .failure(let error):
@@ -345,6 +530,7 @@ struct MessageView: View {
                             }
                         }
                     )
+                    .allowsHitTesting(!isMultiSelectMode)
                 case .file:
                     FileMessageView(
                         messageBody: messageBody,
@@ -354,6 +540,7 @@ struct MessageView: View {
                         isSelf: message.isSelf,
                         shouldHighlight: shouldHighlightMessage(message)
                     )
+                    .allowsHitTesting(!isMultiSelectMode)
                 case .sound:
                     AudioMessageView(
                         messageBody: messageBody,
@@ -362,8 +549,10 @@ struct MessageView: View {
                         isLeft: isLeft,
                         isSelf: message.isSelf,
                         shouldHighlight: shouldHighlightMessage(message),
-                        audioPlayer: audioPlayer
+                        audioPlayer: audioPlayer,
+                        audioPlaybackManager: audioPlaybackManager
                     )
+                    .allowsHitTesting(!isMultiSelectMode)
                 default:
                     if config.isShowUnsupportMessage {
                         Text(LocalizedChatString("NotSupportThisMessage"))

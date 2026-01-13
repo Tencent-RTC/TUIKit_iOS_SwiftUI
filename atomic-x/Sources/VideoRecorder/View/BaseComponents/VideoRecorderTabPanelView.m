@@ -3,7 +3,7 @@
 
 #import "VideoRecorderTabPanelView.h"
 #import <Masonry/Masonry.h>
-#import "NSArray+Functional.h"
+#import "VideoRecorderNSArray+Functional.h"
 #import "VideoRecorderCommon.h"
 #import "VideoRecorderImageUtil.h"
 #import "VideoRecorderSplitterView.h"

@@ -243,7 +243,9 @@
 "MessageTypeRiskImage" = "[違規圖片]";
 "MessageTypeRiskVoice" = "[違規語音]";
 "MessageTypeRiskVideo" = "[違規視頻]";
+"MessageTypeMergedHistory" = "[聊天記錄]";
 "MessageTypeLastMsgCountFormat" = "條";
+"MessageTypeSecurityStrikeInfo" = "涉及敏感內容";
 "MessageTypeSecurityStrike" = "涉及敏感內容，發送失敗";
 "MessageTypeSecurityStrikeVoice" = "涉及敏感內容，無法收聽";
 "MessageTypeSecurityStrikeImage" = "涉及敏感內容，無法查看";
@@ -345,6 +347,7 @@
 "RelayOneByOneForward" = "逐條轉發";
 "RelayCombineForwad" = "合併轉發";
 "RelayGroupChatHistory" = "群聊的聊天記錄";
+"RelayC2CChatHistoryFormat" = "%@的聊天記錄";
 "RelayChatHistoryForSomebodyFormat" = "%@和%@的聊天記錄";
 "RelayErrorForwardFormat" = "@\"轉發失敗, code:%d, desc:%@\"";
 "RelayTargetCreateNewChat" = "創建新聊天";
@@ -739,7 +742,7 @@
 "GroupCreated" = "群聊已創建";
 "CommunityCreated" = "社群已創建";
 "ChooseAnAction" = "選擇操作";
-"MessageCount" = "條";
+"MessageCount" = " 條";
 "QuickReplyOK" = "好的，沒問題";
 "QuickReplyWait" = "稍等，我馬上回覆";
 "QuickReplyThanks" = "謝謝！";
@@ -778,3 +781,12 @@
 "GetGroupSettingInfoFailed" = "取得群聊資訊失敗";
 "VoiceSendMessageDesc" = "向上滑動取消或鬆開發送";
 "VoiceSendMessageCancelDesc" = "放開取消";
+"MessageReadReceipt" = "消息閱讀狀態";
+"MessageReadReceiptEnabledDesc" = "關閉後，您收發的消息均不帶消息閱讀狀態，您將無法看到對方是否已讀，同時對方也無法看到您是否已讀。";
+"MessageReadReceiptDisabledDesc" = "開啟後，您在群聊中收發的消息均帶有消息閱讀狀態，並且可以看到對方是否已讀。與您單聊的好友若也開啟了消息閱讀狀態，您與好友在單聊中收發的消息也將帶有消息閱讀狀態。";
+"Style" = "外觀";
+
+"MentionSelectMember" = "選擇群成員";
+"MentionAll" = "所有人";
+"MentionAtAllTag" = "[@所有人]";
+"MentionAtMeTag" = "[有人@我]";

@@ -13,12 +13,15 @@ public protocol MessageListConfigProtocol {
     var isShowUnsupportMessage: Bool { get }
     var horizontalPadding: CGFloat { get }
     var avatarSpacing: CGFloat { get }
+    var isSupportReaction: Bool { get }
 }
 
 public protocol MessageActionConfigProtocol {
     var isSupportCopy: Bool { get }
     var isSupportDelete: Bool { get }
     var isSupportRecall: Bool { get }
+    var isSupportForward: Bool { get }
+    var isSupportMultiSelect: Bool { get }
 }
 
 public struct ChatMessageListConfig: MessageListConfigProtocol, MessageActionConfigProtocol {
@@ -36,8 +39,11 @@ public struct ChatMessageListConfig: MessageListConfigProtocol, MessageActionCon
     private let userIsSupportCopy: Bool?
     private let userIsSupportDelete: Bool?
     private let userIsSupportRecall: Bool?
+    private let userIsSupportForward: Bool?
+    private let userIsSupportMultiSelect: Bool?
     private let userHorizontalPadding: CGFloat?
     private let userAvatarSpacing: CGFloat?
+    private let userIsSupportReaction: Bool?
 
     public var alignment: Int {
         if let userAlignment = userAlignment {
@@ -119,12 +125,24 @@ public struct ChatMessageListConfig: MessageListConfigProtocol, MessageActionCon
         }
     }
 
+    public var isSupportForward: Bool {
+        return userIsSupportForward ?? true
+    }
+
+    public var isSupportMultiSelect: Bool {
+        return userIsSupportMultiSelect ?? true
+    }
+
     public var horizontalPadding: CGFloat {
         return userHorizontalPadding ?? 16.0
     }
 
     public var avatarSpacing: CGFloat {
         return userAvatarSpacing ?? 12.0
+    }
+
+    public var isSupportReaction: Bool {
+        return userIsSupportReaction ?? true
     }
 
     public init() {
@@ -141,8 +159,11 @@ public struct ChatMessageListConfig: MessageListConfigProtocol, MessageActionCon
         self.userIsSupportCopy = nil
         self.userIsSupportDelete = nil
         self.userIsSupportRecall = nil
+        self.userIsSupportForward = nil
+        self.userIsSupportMultiSelect = nil
         self.userHorizontalPadding = nil
         self.userAvatarSpacing = nil
+        self.userIsSupportReaction = nil
     }
 
     public init(
@@ -165,8 +186,11 @@ public struct ChatMessageListConfig: MessageListConfigProtocol, MessageActionCon
         isSupportCopy: Bool? = nil,
         isSupportDelete: Bool? = nil,
         isSupportRecall: Bool? = nil,
+        isSupportForward: Bool? = nil,
+        isSupportMultiSelect: Bool? = nil,
         horizontalPadding: CGFloat? = nil,
-        avatarSpacing: CGFloat? = nil
+        avatarSpacing: CGFloat? = nil,
+        isSupportReaction: Bool? = nil
     ) {
         self.userAlignment = alignment
         self.userIsShowTimeMessage = isShowTimeMessage
@@ -181,8 +205,11 @@ public struct ChatMessageListConfig: MessageListConfigProtocol, MessageActionCon
         self.userIsSupportCopy = isSupportCopy
         self.userIsSupportDelete = isSupportDelete
         self.userIsSupportRecall = isSupportRecall
+        self.userIsSupportForward = isSupportForward
+        self.userIsSupportMultiSelect = isSupportMultiSelect
         self.userHorizontalPadding = horizontalPadding
         self.userAvatarSpacing = avatarSpacing
+        self.userIsSupportReaction = isSupportReaction
     }
 }
 
@@ -207,5 +234,8 @@ public struct RoomMessageListConfig: MessageListConfigProtocol, MessageActionCon
     public var isSupportCopy: Bool { return false }
     public var isSupportDelete: Bool { return false }
     public var isSupportRecall: Bool { return false }
+    public var isSupportForward: Bool { return false }
+    public var isSupportMultiSelect: Bool { return false }
+    public var isSupportReaction: Bool { return false }
     public init() {}
 }

@@ -127,11 +127,13 @@ public struct UserPicker: View {
         .navigationBarItems(
             leading: Button(LocalizedChatString("Cancel")) {
                 presentationMode.wrappedValue.dismiss()
-            },
+            }
+            .foregroundColor(themeState.colors.textColorLink),
             trailing: Button(LocalizedChatString("Done")) {
                 onSelectedChanged?(selectedUsersList)
                 presentationMode.wrappedValue.dismiss()
             }
+            .foregroundColor(themeState.colors.textColorLink)
             .disabled(selectedUsersList.isEmpty)
         )
     }

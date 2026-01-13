@@ -2,7 +2,7 @@
 // Author: eddardliu
 
 #import "VideoRecorderBeautifyEffectItem.h"
-#import "NSArray+Functional.h"
+#import "VideoRecorderNSArray+Functional.h"
 #import "VideoRecorderCommon.h"
 
 #define DEFAULT_FILTER_EFFECT_STRENGTH 4

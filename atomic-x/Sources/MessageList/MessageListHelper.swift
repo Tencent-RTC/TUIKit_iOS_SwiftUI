@@ -127,7 +127,12 @@ public class MessageListHelper {
         }
     }
     
-    public static func getMessageAbstract(_ messageInfo: MessageInfo?) -> String {
+    /// Get message abstract for display
+    /// - Parameters:
+    ///   - messageInfo: The message to get abstract from
+    ///   - showMergedTitle: If true, show merged message's title; if false, show "[聊天记录]"
+    /// - Returns: Message abstract string
+    public static func getMessageAbstract(_ messageInfo: MessageInfo?, showMergedTitle: Bool = false) -> String {
         guard let messageInfo = messageInfo else { return "" }
         
         switch messageInfo.messageType {
@@ -167,9 +172,118 @@ public class MessageListHelper {
                 return getSystemInfoDisplayString(systemInfo)
             }
             return ""
+            
+        case .merged:
+            if showMergedTitle, let title = messageInfo.messageBody?.mergedMessage?.title, !title.isEmpty {
+                return title
+            }
+            return LocalizedChatString("MessageTypeMergedHistory")
 
         default:
             return ""
+        }
+    }
+    
+    static func shouldShowReadReceipt(message: MessageInfo, isInMergedDetailView: Bool = false) -> Bool {
+        return !isInMergedDetailView &&
+            message.isSelf &&
+            message.needReadReceipt &&
+            message.status == .sendSuccess &&
+            message.messageType != .system
+    }
+    
+    static func getReceiptIconName(message: MessageInfo) -> String {
+        if message.groupID == nil || message.groupID?.isEmpty == true {
+            if message.receipt?.isPeerRead == true {
+                return "check-all-highlight"
+            } else {
+                return "check"
+            }
+        } else {
+            let readCount = message.receipt?.readCount ?? 0
+            let unreadCount = message.receipt?.unreadCount ?? 0
+            let totalCount = readCount + unreadCount
+
+            if readCount == 0 {
+                return "check"
+            } else if readCount == totalCount && totalCount > 0 {
+                return "check-all-highlight"
+            } else {
+                return "check-all"
+            }
+        }
+    }
+    
+    // MARK: - 消息转发相关
+    
+    /// 生成消息摘要（用于合并转发）
+    public static func getMessageAbstractForForward(_ message: MessageInfo) -> String {
+        let senderName: String
+        if let nickname = message.sender.nickname, !nickname.isEmpty {
+            senderName = nickname
+        } else {
+            senderName = message.sender.userID
+        }
+        let content = getMessageAbstract(message)
+        return alignEmojiString(userName: senderName, text: content)
+    }
+    
+    /// 对齐 Emoji 和用户名（处理中文字符对齐问题）
+    private static func alignEmojiString(userName: String, text: String) -> String {
+        // 简化版本：直接返回 "用户名: 内容"
+        // 如果需要复杂的对齐逻辑（如Android），后续可以增强
+        return "\(userName): \(text)"
+    }
+    
+    /// Generate merged forward message title
+    /// - Parameters:
+    ///   - messages: Messages to be forwarded
+    ///   - conversationID: Current conversation ID, used to determine C2C or group chat
+    /// - Returns: Merged message title
+    public static func generateMergedTitle(messages: [MessageInfo], conversationID: String) -> String {
+        // Check if it's a group chat (conversationID starts with "group_")
+        let isGroupChat = conversationID.hasPrefix("group_")
+        
+        if isGroupChat {
+            // Group chat: return "群聊的聊天记录"
+            return LocalizedChatString("RelayGroupChatHistory")
+        } else {
+            // C2C chat: collect unique senders in order of appearance
+            var senderNames: [String] = []
+            var seenSenders: Set<String> = []
+            
+            for message in messages {
+                let sender = message.sender.userID
+                if !seenSenders.contains(sender) {
+                    seenSenders.insert(sender)
+                    // Use nickName, fallback to sender ID
+                    let name = message.sender.nickname ?? sender
+                    senderNames.append(name)
+                }
+                // Only need at most 2 senders for C2C
+                if senderNames.count >= 2 {
+                    break
+                }
+            }
+            
+            if senderNames.count == 2 {
+                // Two senders: "A 和 B 的聊天记录"
+                return String(format: LocalizedChatString("RelayChatHistoryForSomebodyFormat"), senderNames[0], senderNames[1])
+            } else if senderNames.count == 1 {
+                // One sender: "A 的聊天记录"
+                return String(format: LocalizedChatString("RelayC2CChatHistoryFormat"), senderNames[0])
+            } else {
+                // Fallback
+                return LocalizedChatString("RelayChatHistory")
+            }
+        }
+    }
+    
+    /// 生成合并转发的摘要列表（最多4条）
+    public static func generateAbstractList(messages: [MessageInfo]) -> [String] {
+        let maxAbstracts = 4
+        return messages.prefix(maxAbstracts).map { message in
+            getMessageAbstractForForward(message)
         }
     }
 }

@@ -1,59 +1,64 @@
 import SwiftUI
+import Photos
+import AtomicXCore
 
+// MARK: - ImagePicker Config
 public struct ImagePickerConfig {
-    var maxCount: Int = 1
-    var gridCount: Int = 4
-    var primaryColor: Int = -1
+    public var maxImagesCount: Int
+    public var columnNumber: Int
+    public var primaryColor: String?
+    public var showEditButton: Bool
+    public var showOriginalToggle: Bool
+
+    public init(maxImagesCount: Int = 9,
+                columnNumber: Int = 4,
+                primaryColor: String? = nil,
+                showEditButton: Bool = false,
+                showOriginalToggle: Bool = false) {
+        self.maxImagesCount = maxImagesCount
+        self.columnNumber = columnNumber
+        self.primaryColor = primaryColor
+        self.showEditButton = showEditButton
+        self.showOriginalToggle = showOriginalToggle
+    }
 }
 
-public struct ImagePicker: UIViewControllerRepresentable {
-    static var sourceType: UIImagePickerController.SourceType?
-    static var selectedImage: ((UIImage?) -> Void)?
-    static let shared = ImagePicker()
-    static var config: ImagePickerConfig?
+// MARK: - ImagePickerView
+public struct ImagePicker: View {
+    private let config: ImagePickerConfig
+    private let onFinishedSelect: (_ ImageCount: Int) -> Void
+    private let onImagesReady: (_ path: String, _ isOrigin: Bool, _ index: Int) -> Void
 
-    public static func pickImages(sourceType: UIImagePickerController.SourceType,
-                                  imagePickerConfig: ImagePickerConfig? = nil,
-                                  selectedImage: @escaping (UIImage?) -> Void) -> ImagePicker
-    {
-        self.sourceType = sourceType
-        self.selectedImage = selectedImage
-        config = imagePickerConfig
-        return shared
+    public init(
+        config: ImagePickerConfig = ImagePickerConfig(),
+        onFinishedSelect: @escaping (_ ImageCount: Int) -> Void,
+        onImagesReady: @escaping (_ path: String, _ isOrigin: Bool, _ index: Int) -> Void
+    ) {
+        self.config = config
+        self.onFinishedSelect = onFinishedSelect
+        self.onImagesReady = onImagesReady
     }
 
-    public func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.sourceType = ImagePicker.sourceType ?? .photoLibrary
-        picker.delegate = context.coordinator
-        picker.mediaTypes = ["public.image"]
-        return picker
-    }
-
-    public func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    public func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    public class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
-        let parent: ImagePicker
-        init(_ parent: ImagePicker) {
-            self.parent = parent
-        }
-
-        public func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
-            if let image = info[.originalImage] as? UIImage {
-                ImagePicker.selectedImage?(image)
-            } else {
-                ImagePicker.selectedImage?(nil)
+    public var body: some View {
+        AlbumPicker(
+            config: AlbumPickerConfig(
+                maxImagesCount: config.maxImagesCount,
+                columnNumber: config.columnNumber,
+                showEditButton: config.showEditButton,
+                showOriginalToggle: config.showOriginalToggle,
+                albumMode: .images,
+                primary: config.primaryColor
+            ),
+            onFinishedSelect: { count in
+                onFinishedSelect(count)
+            },
+            onProgress: { pickModel, index, progress in
+                if progress >= 1.0 {
+                    if let imagePath = pickModel.mediaPath {
+                        onImagesReady(imagePath, pickModel.isOrigin, index)
+                    }
+                }
             }
-            picker.dismiss(animated: true)
-        }
-
-        public func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            ImagePicker.selectedImage?(nil)
-            picker.dismiss(animated: true)
-        }
+        )
     }
 }

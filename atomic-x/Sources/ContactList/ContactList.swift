@@ -7,33 +7,25 @@ public struct ContactList: View {
     @State private var friendList: [ContactInfo] = []
     @State private var friendApplicationUnreadCount: Int = 0
     @State private var groupApplicationUnreadCount: Int = 0
+    
+    // Sub-page navigation states
+    @State private var showNewFriends: Bool = false
+    @State private var showGroupApplications: Bool = false
+    @State private var showGroupList: Bool = false
+    @State private var showBlackList: Bool = false
+    
     private let contactStore: ContactListStore
-    private let onShowMessage: ((ConversationInfo) -> Void)?
     private let onContactClick: ((AZOrderedListItem) -> Void)?
     private let onGroupClick: ((AZOrderedListItem) -> Void)?
-    private let onNewFriendsClick: (() -> Void)?
-    private let onGroupApplicationsClick: (() -> Void)?
-    private let onGroupListClick: (() -> Void)?
-    private let onBlackListClick: (() -> Void)?
 
     public init(
         contactStore: ContactListStore = ContactListStore.create(),
-        onShowMessage: ((ConversationInfo) -> Void)? = nil,
         onContactClick: ((AZOrderedListItem) -> Void)? = nil,
-        onGroupClick: ((AZOrderedListItem) -> Void)? = nil,
-        onNewFriendsClick: (() -> Void)? = nil,
-        onGroupApplicationsClick: (() -> Void)? = nil,
-        onGroupListClick: (() -> Void)? = nil,
-        onBlackListClick: (() -> Void)? = nil
+        onGroupClick: ((AZOrderedListItem) -> Void)? = nil
     ) {
         self.contactStore = contactStore
-        self.onShowMessage = onShowMessage
         self.onContactClick = onContactClick
         self.onGroupClick = onGroupClick
-        self.onNewFriendsClick = onNewFriendsClick
-        self.onGroupApplicationsClick = onGroupApplicationsClick
-        self.onGroupListClick = onGroupListClick
-        self.onBlackListClick = onBlackListClick
     }
 
     public var body: some View {
@@ -51,7 +43,7 @@ public struct ContactList: View {
                 header: AnyView(
                     VStack(spacing: 0) {
                         Button(action: {
-                            onNewFriendsClick?()
+                            showNewFriends = true
                         }) {
                             ContactNavigationRow(
                                 title: LocalizedChatString("ContactsNewFriends"),
@@ -61,7 +53,7 @@ public struct ContactList: View {
                         .buttonStyle(PlainButtonStyle())
 
                         Button(action: {
-                            onGroupApplicationsClick?()
+                            showGroupApplications = true
                         }) {
                             ContactNavigationRow(
                                 title: LocalizedChatString("ContactsGroupApplications"),
@@ -71,14 +63,14 @@ public struct ContactList: View {
                         .buttonStyle(PlainButtonStyle())
 
                         Button(action: {
-                            onGroupListClick?()
+                            showGroupList = true
                         }) {
                             ContactNavigationRow(title: LocalizedChatString("ContactsGroupChats"))
                         }
                         .buttonStyle(PlainButtonStyle())
 
                         Button(action: {
-                            onBlackListClick?()
+                            showBlackList = true
                         }) {
                             ContactNavigationRow(title: LocalizedChatString("ContactsBlackList"))
                         }
@@ -91,7 +83,39 @@ public struct ContactList: View {
                 }
             )
         }
-        .background(themeState.colors.listColorDefault)
+        .background(themeState.colors.bgColorOperate.ignoresSafeArea())
+        .fullScreenCover(isPresented: $showNewFriends) {
+            FriendApplicationListView(
+                contactStore: contactStore,
+                onDismiss: { showNewFriends = false }
+            )
+            .environmentObject(themeState)
+        }
+        .fullScreenCover(isPresented: $showGroupApplications) {
+            GroupApplicationListView(
+                contactStore: contactStore,
+                onDismiss: { showGroupApplications = false }
+            )
+            .environmentObject(themeState)
+        }
+        .fullScreenCover(isPresented: $showGroupList) {
+            GroupListView(
+                contactStore: contactStore,
+                onGroupClick: { group in
+                    showGroupList = false
+                    onGroupClick?(group)
+                },
+                onDismiss: { showGroupList = false }
+            )
+            .environmentObject(themeState)
+        }
+        .fullScreenCover(isPresented: $showBlackList) {
+            BlackListView(
+                contactStore: contactStore,
+                onDismiss: { showBlackList = false }
+            )
+            .environmentObject(themeState)
+        }
         .onReceive(contactStore.state
             .subscribe(StatePublisherSelector(keyPath: \ContactListState.friendList))
             .receive(on: RunLoop.main)
@@ -163,7 +187,7 @@ private struct ContactNavigationRow: View {
             }
             Image(systemName: "chevron.right")
                 .font(.caption)
-                .foregroundColor(themeState.colors.textColorSecondary)
+                .foregroundColor(themeState.colors.textColorLink)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -313,23 +337,52 @@ private struct GroupApplicationCell: View {
     }
 }
 
+// MARK: - Sub-page Navigation Bar
+
+private struct SubPageNavigationBar: View {
+    @EnvironmentObject var themeState: ThemeState
+    let title: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack {
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(themeState.colors.textColorPrimary)
+                    .frame(width: 44, height: 44)
+            }
+            Spacer()
+            Text(title)
+                .font(.headline)
+                .foregroundColor(themeState.colors.textColorPrimary)
+            Spacer()
+            // Placeholder for symmetry
+            Color.clear
+                .frame(width: 44, height: 44)
+        }
+        .padding(.horizontal, 8)
+        .background(themeState.colors.bgColorOperate)
+    }
+}
+
 // MARK: - Group List View
 
 public struct GroupListView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var groupList: [ContactInfo] = []
     private var contactStore: ContactListStore
-    private let onShowMessage: ((ConversationInfo) -> Void)?
-    private let onShowProfile: ((AZOrderedListItem) -> Void)?
+    private let onGroupClick: ((AZOrderedListItem) -> Void)?
+    private let onDismiss: (() -> Void)?
 
     public init(
         contactStore: ContactListStore,
-        onShowMessage: ((ConversationInfo) -> Void)? = nil,
-        onShowProfile: ((AZOrderedListItem) -> Void)? = nil
+        onGroupClick: ((AZOrderedListItem) -> Void)? = nil,
+        onDismiss: (() -> Void)? = nil
     ) {
         self.contactStore = contactStore
-        self.onShowMessage = onShowMessage
-        self.onShowProfile = onShowProfile
+        self.onGroupClick = onGroupClick
+        self.onDismiss = onDismiss
     }
 
     private func fetchData() {
@@ -337,55 +390,49 @@ public struct GroupListView: View {
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(groupList, id: \.contactID) { group in
-                    Button(action: {
-                        if let onShowMessage = onShowMessage {
-                            let conversation = createConversationFromGroup(group)
-                            onShowMessage(conversation)
-                        } else {
+        VStack(spacing: 0) {
+            SubPageNavigationBar(
+                title: LocalizedChatString("ContactsGroupChats"),
+                onDismiss: { onDismiss?() }
+            )
+            
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(groupList, id: \.contactID) { group in
+                        Button(action: {
                             let groupItem = AZOrderedListItem(
                                 userID: group.contactID,
                                 avatarURL: group.avatarURL,
                                 title: group.title ?? group.contactID
                             )
-                            onShowProfile?(groupItem)
+                            onGroupClick?(groupItem)
+                        }) {
+                            HStack {
+                                Avatar(
+                                    url: group.avatarURL,
+                                    name: group.title ?? group.contactID
+                                )
+                                Text(group.title ?? group.contactID)
+                                    .font(.body)
+                                    .foregroundColor(themeState.colors.textColorPrimary)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 12)
+                            .background(themeState.colors.bgColorTopBar)
                         }
-                    }) {
-                        HStack {
-                            Avatar(
-                                url: group.avatarURL,
-                                name: group.title ?? group.contactID
-                            )
-                            Text(group.title ?? group.contactID)
-                                .font(.body)
-                                .foregroundColor(themeState.colors.textColorPrimary)
-                            Spacer()
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 12)
-                        .background(themeState.colors.bgColorOperate)
+                        .buttonStyle(PlainButtonStyle())
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
             }
         }
+        .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .onAppear {
             contactStore.fetchJoinedGroupList(completion: nil)
         }
         .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.groupList))) { groupList in
             self.groupList = groupList
         }
-        .modifier(NavigationTitleModifier(title: LocalizedChatString("ContactsGroupChats")))
-    }
-
-    private func createConversationFromGroup(_ group: ContactInfo) -> ConversationInfo {
-        var conversation = ConversationInfo(conversationID: ChatUtil.getGroupConversationID(group.contactID))
-        conversation.avatarURL = group.avatarURL
-        conversation.type = .group
-        conversation.title = group.title ?? group.contactID
-        return conversation
     }
 }
 
@@ -395,28 +442,26 @@ public struct BlackListView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var blackList: [ContactInfo] = []
     private var contactStore: ContactListStore
-    private let onShowProfile: ((AZOrderedListItem) -> Void)?
+    private let onDismiss: (() -> Void)?
 
     public init(
         contactStore: ContactListStore,
-        onShowProfile: ((AZOrderedListItem) -> Void)? = nil
+        onDismiss: (() -> Void)? = nil
     ) {
         self.contactStore = contactStore
-        self.onShowProfile = onShowProfile
+        self.onDismiss = onDismiss
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(blackList, id: \.contactID) { contact in
-                    Button(action: {
-                        let userItem = AZOrderedListItem(
-                            userID: contact.contactID,
-                            avatarURL: contact.avatarURL,
-                            title: contact.title ?? contact.contactID
-                        )
-                        onShowProfile?(userItem)
-                    }) {
+        VStack(spacing: 0) {
+            SubPageNavigationBar(
+                title: LocalizedChatString("ContactsBlackList"),
+                onDismiss: { onDismiss?() }
+            )
+            
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(blackList, id: \.contactID) { contact in
                         HStack {
                             Avatar(
                                 url: contact.avatarURL,
@@ -429,19 +474,18 @@ public struct BlackListView: View {
                         }
                         .padding(.horizontal, 8)
                         .padding(.vertical, 12)
-                        .background(themeState.colors.bgColorOperate)
+                        .background(themeState.colors.bgColorTopBar)
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
             }
         }
+        .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .onAppear {
             contactStore.fetchBlackList(completion: nil)
         }
         .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.blackList))) { blackList in
             self.blackList = blackList
         }
-        .modifier(NavigationTitleModifier(title: LocalizedChatString("ContactsBlackList")))
     }
 }
 
@@ -451,45 +495,58 @@ public struct FriendApplicationListView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var friendApplicationList: [FriendApplicationInfo] = []
     private var contactStore: ContactListStore
+    private let onDismiss: (() -> Void)?
 
-    public init(contactStore: ContactListStore) {
+    public init(
+        contactStore: ContactListStore,
+        onDismiss: (() -> Void)? = nil
+    ) {
         self.contactStore = contactStore
+        self.onDismiss = onDismiss
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(friendApplicationList, id: \.applicationID) { application in
-                    FriendApplicationCell(
-                        application: application,
-                        onAccept: {
-                            contactStore.acceptFriendApplication(info: application) { result in
-                                DispatchQueue.main.async {
-                                    switch result {
-                                    case .success:
-                                        WindowToastManager.shared.show(LocalizedChatString("FriendRequestAccepted"), type: .success, duration: 3)
-                                    case .failure(let error):
-                                        WindowToastManager.shared.show(LocalizedChatString("FriendRequestAcceptFailed"), type: .error, duration: 3)
+        VStack(spacing: 0) {
+            SubPageNavigationBar(
+                title: LocalizedChatString("ContactsNewFriends"),
+                onDismiss: { onDismiss?() }
+            )
+            
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(friendApplicationList, id: \.applicationID) { application in
+                        FriendApplicationCell(
+                            application: application,
+                            onAccept: {
+                                contactStore.acceptFriendApplication(info: application) { result in
+                                    DispatchQueue.main.async {
+                                        switch result {
+                                        case .success:
+                                            WindowToastManager.shared.show(LocalizedChatString("FriendRequestAccepted"), type: .success, duration: 3)
+                                        case .failure:
+                                            WindowToastManager.shared.show(LocalizedChatString("FriendRequestAcceptFailed"), type: .error, duration: 3)
+                                        }
+                                    }
+                                }
+                            },
+                            onRefuse: {
+                                contactStore.refuseFriendApplication(info: application) { result in
+                                    DispatchQueue.main.async {
+                                        switch result {
+                                        case .success:
+                                            WindowToastManager.shared.show(LocalizedChatString("FriendRequestDeclined"), type: .info, duration: 3)
+                                        case .failure:
+                                            WindowToastManager.shared.show(LocalizedChatString("FriendRequestDeclineFailed"), type: .error, duration: 3)
+                                        }
                                     }
                                 }
                             }
-                        },
-                        onRefuse: {
-                            contactStore.refuseFriendApplication(info: application) { result in
-                                DispatchQueue.main.async {
-                                    switch result {
-                                    case .success:
-                                        WindowToastManager.shared.show(LocalizedChatString("FriendRequestDeclined"), type: .info, duration: 3)
-                                    case .failure(let error):
-                                        WindowToastManager.shared.show(LocalizedChatString("FriendRequestDeclineFailed"), type: .error, duration: 3)
-                                    }
-                                }
-                            }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
+        .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .onAppear {
             contactStore.fetchFriendApplicationList(completion: nil)
             contactStore.clearFriendApplicationUnreadCount(completion: nil)
@@ -506,45 +563,58 @@ public struct GroupApplicationListView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var groupApplicationList: [GroupApplicationInfo] = []
     private var contactStore: ContactListStore
+    private let onDismiss: (() -> Void)?
 
-    public init(contactStore: ContactListStore) {
+    public init(
+        contactStore: ContactListStore,
+        onDismiss: (() -> Void)? = nil
+    ) {
         self.contactStore = contactStore
+        self.onDismiss = onDismiss
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                ForEach(groupApplicationList, id: \.applicationID) { application in
-                    GroupApplicationCell(
-                        application: application,
-                        onAccept: {
-                            contactStore.acceptGroupApplication(info: application) { result in
-                                DispatchQueue.main.async {
-                                    switch result {
-                                    case .success:
-                                        WindowToastManager.shared.show(LocalizedChatString("GroupApplicationAccepted"), type: .success, duration: 3)
-                                    case .failure(let error):
-                                        WindowToastManager.shared.show(LocalizedChatString("GroupApplicationAcceptFailed"), type: .error, duration: 3)
+        VStack(spacing: 0) {
+            SubPageNavigationBar(
+                title: LocalizedChatString("ContactsGroupApplications"),
+                onDismiss: { onDismiss?() }
+            )
+            
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(groupApplicationList, id: \.applicationID) { application in
+                        GroupApplicationCell(
+                            application: application,
+                            onAccept: {
+                                contactStore.acceptGroupApplication(info: application) { result in
+                                    DispatchQueue.main.async {
+                                        switch result {
+                                        case .success:
+                                            WindowToastManager.shared.show(LocalizedChatString("GroupApplicationAccepted"), type: .success, duration: 3)
+                                        case .failure:
+                                            WindowToastManager.shared.show(LocalizedChatString("GroupApplicationAcceptFailed"), type: .error, duration: 3)
+                                        }
+                                    }
+                                }
+                            },
+                            onRefuse: {
+                                contactStore.refuseGroupApplication(info: application) { result in
+                                    DispatchQueue.main.async {
+                                        switch result {
+                                        case .success:
+                                            WindowToastManager.shared.show(LocalizedChatString("GroupApplicationDeclined"), type: .success, duration: 3)
+                                        case .failure:
+                                            WindowToastManager.shared.show(LocalizedChatString("GroupApplicationDeclineFailed"), type: .error, duration: 3)
+                                        }
                                     }
                                 }
                             }
-                        },
-                        onRefuse: {
-                            contactStore.refuseGroupApplication(info: application) { result in
-                                DispatchQueue.main.async {
-                                    switch result {
-                                    case .success:
-                                        WindowToastManager.shared.show(LocalizedChatString("GroupApplicationDeclined"), type: .success, duration: 3)
-                                    case .failure(let error):
-                                        WindowToastManager.shared.show(LocalizedChatString("GroupApplicationDeclineFailed"), type: .error, duration: 3)
-                                    }
-                                }
-                            }
-                        }
-                    )
+                        )
+                    }
                 }
             }
         }
+        .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .onAppear {
             contactStore.fetchGroupApplicationList(completion: nil)
             contactStore.clearGroupApplicationUnreadCount(completion: nil)

@@ -71,7 +71,8 @@ public struct MessageInput: View {
                 isLongPressingState: $isLongPressingState,
                 dragOffset: $dragOffset,
                 shouldCancelRecording: $shouldCancelRecording,
-                isShowingAudioRecorder: $isShowingAudioRecorder
+                isShowingAudioRecorder: $isShowingAudioRecorder,
+                config: config
             )
             .background(
                 GeometryReader { geo in
@@ -96,7 +97,7 @@ public struct MessageInput: View {
                     onRecordingComplete: { path, duration in
                         print("audio recorde on recording complete. path = \(path ?? "") duration = \(duration)")
                         if let path = path {
-                            let messageManager = MessageInputManager(messageInputStore: messageInputStore)
+                            let messageManager = MessageInputManager(messageInputStore: messageInputStore, config: config)
                             messageManager.sendVoiceMessage(path, duration: Int(duration))
                         }
                         isShowingAudioRecorder = false
@@ -117,7 +118,7 @@ private struct InputState: Equatable {
 }
 
 private let normalFont: UIFont = .systemFont(ofSize: 16)
-private let normalColor: UIColor = .black
+private let normalColor: UIColor = .label
 private struct InputStateKey: PreferenceKey {
     static var defaultValue = InputState()
     static func reduce(value: inout InputState, nextValue: () -> InputState) {
@@ -134,12 +135,18 @@ private class TextEditorState: ObservableObject {
     var deleteLastCharacter: (() -> Void)?
     var becomeFirstResponder: (() -> Void)?
     var resignFirstResponder: (() -> Void)?
+    var appendText: ((NSAttributedString) -> Void)?
 }
 
 private struct FixedHeightTextEditor: UIViewRepresentable {
     @ObservedObject var state: TextEditorState
     var maxLines: Int = 5
     var onSend: (() -> Void)? = nil
+    var onAtTriggered: ((Int) -> Void)? = nil
+    var onDeleteAtPosition: ((Int) -> MentionInfo?)? = nil
+    var onMentionDeleted: ((MentionInfo) -> Void)? = nil
+    var isGroupChat: Bool = false
+    var enableMention: Bool = true
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -202,16 +209,50 @@ private struct FixedHeightTextEditor: UIViewRepresentable {
         state.resignFirstResponder = { [weak textView] in
             textView?.resignFirstResponder()
         }
+        state.appendText = { [weak textView] attrStr in
+            guard let textView = textView else { return }
+            // Append text at the end of current content
+            let endPosition = textView.textStorage.length
+            textView.textStorage.insert(attrStr, at: endPosition)
+            // Move cursor to the end
+            let newPosition = textView.textStorage.length
+            textView.selectedRange = NSRange(location: newPosition, length: 0)
+            context.coordinator.resetTextStyle()
+            state.displayText = textView.attributedText
+            // Update height
+            let newSize = textView.sizeThatFits(CGSize(width: textView.frame.size.width, height: CGFloat.greatestFiniteMagnitude))
+            let singleLineHeight: CGFloat = textView.font?.lineHeight ?? 24
+            let padding: CGFloat = textView.textContainerInset.top + textView.textContainerInset.bottom
+            let maxHeight = singleLineHeight * 5 + padding
+            let newHeight = min(max(singleLineHeight + padding, newSize.height), maxHeight)
+            if state.height != newHeight {
+                DispatchQueue.main.async {
+                    state.height = newHeight
+                }
+            }
+        }
         return textView
     }
 
     func updateUIView(_ textView: UITextView, context: Context) {
-        if textView.text != state.displayText?.string {
-            textView.text = state.displayText?.string
-            let currentPosition = textView.selectedRange.location
-            textView.selectedRange = NSRange(location: currentPosition, length: 0)
+        // Compare attributed text instead of plain text to preserve formatting and emoji attachments
+        if let displayText = state.displayText {
+            // Only update if the content is actually different to avoid update loops
+            // Don't update if user is actively typing (checked via coordinator flag)
+            if !context.coordinator.isUserEditing && !textView.attributedText.isEqual(to: displayText) {
+                textView.attributedText = displayText
+                // Move cursor to the end of the text
+                let endPosition = displayText.length
+                textView.selectedRange = NSRange(location: endPosition, length: 0)
+                context.coordinator.resetTextStyle()
+            }
+        } else {
+            // Clear text if displayText is nil
+            if textView.attributedText.length > 0 {
+                textView.attributedText = NSAttributedString(string: "")
+            }
         }
-        context.coordinator.resetTextStyle()
+        
         let newSize = textView.sizeThatFits(CGSize(width: textView.frame.size.width, height: CGFloat.greatestFiniteMagnitude))
         let singleLineHeight: CGFloat = textView.font?.lineHeight ?? 24
         let padding: CGFloat = textView.textContainerInset.top + textView.textContainerInset.bottom
@@ -228,15 +269,22 @@ private struct FixedHeightTextEditor: UIViewRepresentable {
     class Coordinator: NSObject, UITextViewDelegate {
         var parent: FixedHeightTextEditor
         weak var inputTextView: UITextView?
+        var isUserEditing = false
+        
         init(_ parent: FixedHeightTextEditor) {
             self.parent = parent
         }
 
-        func textViewDidBeginEditing(_ textView: UITextView) {}
+        func textViewDidBeginEditing(_ textView: UITextView) {
+            isUserEditing = true
+        }
 
-        func textViewDidEndEditing(_ textView: UITextView) {}
+        func textViewDidEndEditing(_ textView: UITextView) {
+            isUserEditing = false
+        }
 
         func textViewDidChange(_ textView: UITextView) {
+            isUserEditing = true
             resetTextStyle()
             parent.state.displayText = textView.attributedText
             let newSize = textView.sizeThatFits(CGSize(width: textView.frame.size.width, height: CGFloat.greatestFiniteMagnitude))
@@ -252,6 +300,40 @@ private struct FixedHeightTextEditor: UIViewRepresentable {
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
+            // Detect @ or ＠ input for mention
+            if (text == "@" || text == "＠") && parent.isGroupChat && parent.enableMention {
+                // Keep the @ character and trigger mention picker
+                DispatchQueue.main.async {
+                    self.parent.onAtTriggered?(range.location)
+                }
+                return true
+            }
+            
+            // Handle deletion - check if deleting within a mention block
+            if text.isEmpty && range.length > 0 {
+                if let mentionToDelete = parent.onDeleteAtPosition?(range.location) {
+                    // Validate mention range before deletion
+                    let textLength = textView.textStorage.length
+                    let mentionStart = mentionToDelete.startIndex
+                    let mentionLength = mentionToDelete.length
+                    
+                    // Ensure mention range is within bounds
+                    if mentionStart >= 0 && mentionStart < textLength {
+                        let safeLength = min(mentionLength, textLength - mentionStart)
+                        if safeLength > 0 {
+                            let mentionRange = NSRange(location: mentionStart, length: safeLength)
+                            textView.textStorage.deleteCharacters(in: mentionRange)
+                            textView.selectedRange = NSRange(location: mentionStart, length: 0)
+                            resetTextStyle()
+                            parent.state.displayText = textView.attributedText
+                            // Notify that mention was deleted
+                            parent.onMentionDeleted?(mentionToDelete)
+                            return false
+                        }
+                    }
+                }
+            }
+            
             if !text.contains("[") && !text.contains("]") {
                 if text == "\n" {
                     parent.onSend?()
@@ -305,7 +387,8 @@ private struct MessageInputView: View {
         isLongPressingState: Binding<Bool>,
         dragOffset: Binding<CGFloat>,
         shouldCancelRecording: Binding<Bool>,
-        isShowingAudioRecorder: Binding<Bool>
+        isShowingAudioRecorder: Binding<Bool>,
+        config: MessageInputConfigProtocol
     ) {
         self.messageInputStore = messageInputStore
         self.conversationID = conversationID
@@ -313,7 +396,7 @@ private struct MessageInputView: View {
         self._dragOffset = dragOffset
         self._shouldCancelRecording = shouldCancelRecording
         self._isShowingAudioRecorder = isShowingAudioRecorder
-        self.messageManager = MessageInputManager(messageInputStore: messageInputStore)
+        self.messageManager = MessageInputManager(messageInputStore: messageInputStore, config: config)
     }
 
     @State private var isShowingPhotoTaker = false
@@ -339,6 +422,12 @@ private struct MessageInputView: View {
     @Environment(\.MessageInputConfigProtocol) var inputStyle: MessageInputConfigProtocol
     @StateObject private var keyboardHandler = KeyboardHandler()
     @State private var isInputFocused = false
+    @State private var draftSaveWorkItem: DispatchWorkItem?
+    @State private var isLoadingDraft = false
+    @State private var isShowingMentionPicker = false
+    @State private var mentionList: [MentionInfo] = []
+    @State private var pendingAtPosition: Int = 0
+    private let conversationStore = ConversationListStore.create()
     private var totalInputAreaHeight: CGFloat {
         var height = textEditorState.height + 12
         if isShowingEmojiPicker { height += 300 }
@@ -384,45 +473,42 @@ private struct MessageInputView: View {
         .fullScreenCover(isPresented: $isShowingPhotoTaker) {
             VideoRecorder(
                 config: VideoRecorderConfig(
-                    recordMode: .photoOnly,
-                    primaryColor: themeState.currentPrimaryColor
-                )
-            ) { mediaPath, mediaType in
-                var key = "lastTakenPhotoURL"
-                if mediaType == .video {
-                    key = "lastRecordedVideoURL"
-                }
-                var mediaURL:URL?
-                if let mediaPath = mediaPath {
-                    mediaURL = URL(fileURLWithPath: mediaPath)
-                }
-                UserDefaults.standard.set(mediaURL, forKey: key)
-            }
-            .onDisappear {
-                if let videoURL = UserDefaults.standard.url(forKey: "lastRecordedVideoURL") {
-                    UserDefaults.standard.removeObject(forKey: "lastRecordedVideoURL")
-                    createThumbnailAndSendVideo(videoURL)
-                } else if let photoURL = UserDefaults.standard.url(forKey: "lastTakenPhotoURL") {
-                    UserDefaults.standard.removeObject(forKey: "lastTakenPhotoURL")
-                    if let image = UIImage(contentsOfFile: photoURL.path) {
-                        saveAndSendImage(image)
+                    recordMode: .photoOnly
+                ),
+                onVideoCaptured: { _, _, _ in },
+                onPhotoCaptured: { imagePath in
+                    if let imagePath = imagePath {
+                        saveAndSendImage(imagePath)
                     }
                 }
-            }
+            )
         }
-        .sheet(isPresented: $isShowingImagePicker) {
-            ImagePicker.pickImages(sourceType: .photoLibrary, selectedImage: { image in
-                if let image = image {
-                    saveAndSendImage(image)
+        .fullScreenCover(isPresented: $isShowingVideoPicker) {
+            VideoPicker(
+                config: VideoPickerConfig(
+                    maxImagesCount: 9,
+                    columnNumber: 4,
+                    primary: themeState.currentPrimaryColor
+                ),
+                onFinishedSelect: { mediaCount in
+                    isShowingVideoPicker = false
+                    print("User selected \(mediaCount) media file(s)")
+                },
+                onProgress: { pickModel, index, progress in
+                    print("Media \(index) processing progress: \(Int(progress * 100))%")
+                    if progress >= 1.0 {
+                        DispatchQueue.global(qos: .userInitiated).async {
+                            if let mediaPath = pickModel.mediaPath {
+                                if pickModel.mediaType == .video {
+                                    createThumbnailAndSendVideo(mediaPath, pickModel.videoThumbnailPath)
+                                } else if pickModel.mediaType == .image {
+                                    saveAndSendImage(mediaPath)
+                                }
+                            }
+                        }
+                    }
                 }
-            })
-        }
-        .sheet(isPresented: $isShowingVideoPicker) {
-            VideoPicker.pickVideos(selectedVideo: { videoURL in
-                if let videoURL = videoURL {
-                    createThumbnailAndSendVideo(videoURL)
-                }
-            })
+            )
         }
         .sheet(isPresented: $isShowingFilePicker) {
             FilePicker.pickFiles { selectedFile in
@@ -431,51 +517,38 @@ private struct MessageInputView: View {
                 }
             }
         }
+        .sheet(isPresented: $isShowingMentionPicker) {
+            MentionMemberPicker(
+                groupID: groupID,
+                atPosition: pendingAtPosition,
+                onMembersSelected: { mentionInfos, position in
+                    insertMentions(mentionInfos, atPosition: position)
+                }
+            )
+            .environmentObject(themeState)
+        }
         .fullScreenCover(isPresented: $isShowingVideoRecorder) {
-            VideoRecorder(config: VideoRecorderConfig(
-                recordMode: .videoPhotoMix,
-                primaryColor: themeState.currentPrimaryColor
-            )) { mediaPath, mediaType in
-                var key = "lastRecordedVideoURL"
-                if mediaType == .photo {
-                    key = "lastTakenPhotoURL"
-                }
-                var mediaURL:URL?
-                if let mediaPath = mediaPath {
-                    mediaURL = URL(fileURLWithPath: mediaPath)
-                }
-                UserDefaults.standard.set(mediaURL, forKey: key)
-            }
-            .onDisappear {
-                if let videoURL = UserDefaults.standard.url(forKey: "lastRecordedVideoURL") {
-                    UserDefaults.standard.removeObject(forKey: "lastRecordedVideoURL")
-                    createThumbnailAndSendVideo(videoURL)
-                } else if let photoURL = UserDefaults.standard.url(forKey: "lastTakenPhotoURL") {
-                    UserDefaults.standard.removeObject(forKey: "lastTakenPhotoURL")
-                    let fileExists = FileManager.default.fileExists(atPath: photoURL.path)
-                    print(" File exists: \(fileExists)")
-                    if let image = UIImage(contentsOfFile: photoURL.path) {
-                        saveAndSendImage(image)
-                    } else {
-                        print(" Failed to load image from path: \(photoURL.path)")
-                        do {
-                            let imageData = try Data(contentsOf: photoURL)
-                            if let image = UIImage(data: imageData) {
-                                print(" Successfully loaded image using Data method")
-                                saveAndSendImage(image)
-                            }
-                        } catch {
-                            print(" Failed to load image data: \(error.localizedDescription)")
-                        }
+            VideoRecorder(
+                config: VideoRecorderConfig(
+                    recordMode: .videoPhotoMix
+                ),
+                onVideoCaptured: { videoPath, _, thumbPath in
+                    if let videoPath = videoPath {
+                        createThumbnailAndSendVideo(videoPath, thumbPath)
+                    }
+                },
+                onPhotoCaptured: { imagePath in
+                    if let imagePath = imagePath {
+                        saveAndSendImage(imagePath)
                     }
                 }
-            }
+            )
         }
         .actionSheet(isPresented: $isShowingMediaActionSheet) {
             ActionSheet(
                 title: Text(LocalizedChatString("ChooseMediaType")),
                 buttons: [
-                    .default(Text(LocalizedChatString("MorePhoto"))) { isShowingImagePicker = true },
+                    .default(Text(LocalizedChatString("MorePhoto"))) { isShowingVideoPicker = true },
                     .default(Text(LocalizedChatString("MoreCamera"))) { isShowingPhotoTaker = true },
                     .default(Text(LocalizedChatString("MoreVideo"))) { isShowingVideoRecorder = true },
                     .default(Text(LocalizedChatString("MoreFile"))) { isShowingFilePicker = true },
@@ -504,6 +577,47 @@ private struct MessageInputView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 checkMicrophonePermission()
             }
+            loadDraft()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("mentionUserNotification"))) { notification in
+            // Handle mention user from avatar long press (only in group chat)
+            guard isGroupChat else {
+                print(">>>>> mentionUserNotification ignored, not a group chat. conversationID: \(conversationID)")
+                return
+            }
+            
+            if let userInfo = notification.userInfo,
+               let userID = userInfo["userID"] as? String,
+               let nickname = userInfo["nickname"] as? String
+            {
+                // Use displayText length (UITextView position) instead of getSendText() length
+                let displayTextLength = textEditorState.displayText?.length ?? 0
+                let mentionText = "@\(nickname) "
+                
+                // Create mention info with display position
+                let mentionInfo = MentionInfo(
+                    userID: userID,
+                    displayName: nickname,
+                    startIndex: displayTextLength,
+                    length: mentionText.count
+                )
+                
+                // Create attributed string for mention text
+                let mentionAttrStr = EmojiManager.shared.createAttributedStringWithTextAndStyle(
+                    text: mentionText,
+                    withFont: normalFont,
+                    textColor: normalColor
+                )
+                
+                // Add to mention list
+                mentionList.append(mentionInfo)
+                
+                // Directly append text to UITextView without losing focus
+                textEditorState.appendText?(mentionAttrStr)
+                
+                // Ensure input is focused
+                textEditorState.becomeFirstResponder?()
+            }
         }
         .onReceive(keyboardHandler.$isKeyboardVisible) { isVisible in
             if isVisible {
@@ -523,35 +637,64 @@ private struct MessageInputView: View {
         .onChange(of: textEditorState.height) { newHeight in
             textHeight = newHeight
         }
+        .onChange(of: textEditorState.displayText) { _ in
+            // Don't save draft while loading draft to avoid overwriting
+            if !isLoadingDraft {
+                saveDraftWithDebounce()
+            }
+        }
+        .onDisappear {
+            saveDraftImmediately()
+        }
     }
 
     private var InputBarArea: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             Spacer()
             if inputStyle.isShowMore {
                 Button(action: {
                     isShowingMediaActionSheet = true
                 }) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 20))
+                    Image("input_more", bundle: AtomicXChatResources.resourceBundle)
+                        .resizable()
+                        .renderingMode(.template)
                         .foregroundColor(themeState.colors.buttonColorPrimaryDefault)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 24, height: 24)
                 }
             }
             ZStack(alignment: .trailing) {
                 ZStack(alignment: .leading) {
-                    if textEditorState.displayText?.string.count == 0 {
+                    if textEditorState.displayText?.string.isEmpty ?? true {
                         Text(LocalizedChatString("SendMessage"))
                             .font(.system(size: 16))
                             .foregroundColor(themeState.colors.textColorTertiary)
-                            .padding(.horizontal, textEditorState.horizontalPadding)
-                            .padding(.vertical, textEditorState.verticalPadding)
+                            .padding(.leading, 4)
+                            .frame(height: textEditorState.height)
                             .allowsHitTesting(false)
                     }
                     HStack {
-                        FixedHeightTextEditor(state: textEditorState, maxLines: 5, onSend: {
-                            sendTextMessage()
-                        })
+                        FixedHeightTextEditor(
+                            state: textEditorState,
+                            maxLines: 5,
+                            onSend: {
+                                sendTextMessage()
+                            },
+                            onAtTriggered: { position in
+                                if isGroupChat {
+                                    pendingAtPosition = position
+                                    isShowingMentionPicker = true
+                                }
+                            },
+                            onDeleteAtPosition: { position in
+                                findMentionToDelete(at: position)
+                            },
+                            onMentionDeleted: { mention in
+                                // Remove deleted mention from list
+                                mentionList.removeAll { $0.userID == mention.userID && $0.startIndex == mention.startIndex }
+                            },
+                            isGroupChat: isGroupChat,
+                            enableMention: inputStyle.enableMention
+                        )
                         .background(Color.clear)
                         .padding(.trailing, 40)
                         .onTapGesture {
@@ -562,22 +705,19 @@ private struct MessageInputView: View {
                     .frame(minHeight: textEditorState.height, maxHeight: textEditorState.height)
                 }
                 .frame(maxWidth: .infinity)
-                VStack {
-                    Button(action: {
-                        if isShowingEmojiPicker {
-                            showKeyboard()
-                        } else {
-                            showEmojiPicker()
-                        }
-                    }) {
-                        Image(systemName: isShowingEmojiPicker ? "keyboard" : "face.smiling")
-                            .font(.system(size: 20))
-                            .foregroundColor(themeState.colors.buttonColorPrimaryDefault)
-                            .frame(width: 32, height: 32)
-                            .contentShape(Rectangle())
+                Button(action: {
+                    if isShowingEmojiPicker {
+                        showKeyboard()
+                    } else {
+                        showEmojiPicker()
                     }
-                    .padding(.top, 8)
-                    Spacer()
+                }) {
+                    Image(isShowingEmojiPicker ? "input_keyboard" : "input_emoji", bundle: AtomicXChatResources.resourceBundle)
+                        .resizable()
+                        .renderingMode(.template)
+                        .foregroundColor(themeState.colors.buttonColorPrimaryDefault)
+                        .frame(width: 19, height: 19)
+                        .contentShape(Rectangle())
                 }
                 .padding(.trailing, 8)
             }
@@ -588,10 +728,11 @@ private struct MessageInputView: View {
             HStack(spacing: 10) {
                 if inputStyle.isShowAudioRecorder {
                     Button(action: {}) {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 20))
+                        Image("input_audio", bundle: AtomicXChatResources.resourceBundle)
+                            .resizable()
+                            .renderingMode(.template)
                             .foregroundColor(themeState.colors.buttonColorPrimaryDefault)
-                            .frame(width: 40, height: 40)
+                            .frame(width: 24, height: 24)
                     }
                     .simultaneousGesture(
                         LongPressGesture(minimumDuration: 0.2)
@@ -629,14 +770,13 @@ private struct MessageInputView: View {
                     Button(action: {
                         isShowingVideoRecorder = true
                     }) {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 18))
+                        Image("input_camera", bundle: AtomicXChatResources.resourceBundle)
+                            .resizable()
+                            .renderingMode(.template)
                             .foregroundColor(themeState.colors.buttonColorPrimaryDefault)
-                            .frame(width: 32, height: 32)
+                            .frame(width: 24, height: 24)
                             .contentShape(Rectangle())
                     }
-                    .alignmentGuide(.top) { d in d[.top] }
-                    .padding(.top, 6)
                 }
             }
             .padding(.trailing, 12)
@@ -646,71 +786,44 @@ private struct MessageInputView: View {
         .clipped()
     }
 
-    private func saveAndSendImage(_ image: UIImage) {
-        let imagePath = ChatUtil.generateMediaPath(messageType: .image, withExtension: nil)
-        let directory = (imagePath as NSString).deletingLastPathComponent
-        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: nil)
-        if let imageData = image.jpegData(compressionQuality: 0.8) {
-            try? imageData.write(to: URL(fileURLWithPath: imagePath))
-            sendImageMessage(imagePath)
-            onSendImage?(URL(fileURLWithPath: imagePath))
-        }
+    private func saveAndSendImage(_ imagePath: String) {
+        sendImageMessage(imagePath)
+        onSendImage?(URL(fileURLWithPath: imagePath))
     }
 
-    private func createThumbnailAndSendVideo(_ videoURL: URL) {
-        let videoPath = ChatUtil.generateMediaPath(messageType: .video, withExtension: "mp4")
-        let thumbnailPath = ChatUtil.generateMediaPath(messageType: .image, withExtension: nil)
-        let directory = (videoPath as NSString).deletingLastPathComponent
-        do {
-            try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: nil)
-        } catch {}
-        let asset = AVAsset(url: videoURL)
-        if let exportSession = AVAssetExportSession(asset: asset, presetName: AVAssetExportPresetMediumQuality) {
-            if FileManager.default.fileExists(atPath: videoPath) {
-                try? FileManager.default.removeItem(atPath: videoPath)
-            }
-            exportSession.outputURL = URL(fileURLWithPath: videoPath)
-            exportSession.outputFileType = .mp4
-            exportSession.shouldOptimizeForNetworkUse = true
-            let semaphore = DispatchSemaphore(value: 0)
-            var exportSuccess = false
-            exportSession.exportAsynchronously {
-                switch exportSession.status {
-                case .completed:
-                    exportSuccess = true
-                case .failed:
-                    print("export video failed")
-                case .cancelled:
-                    print("export video cancelled")
-                default:
-                    print("export video status:\(exportSession.status.rawValue)")
-                }
-                semaphore.signal()
-            }
-            _ = semaphore.wait(timeout: .now() + 60.0)
-            if !exportSuccess {
+    private func createThumbnailAndSendVideo(_ videoPath: String, _ videoThumbnailPath: String?) {
+        var thumbnailPath = videoThumbnailPath
+        if videoThumbnailPath == nil {
+            thumbnailPath = ChatUtil.generateMediaPath(messageType: .image, withExtension: nil)
+            
+            guard let thumbnailPath = thumbnailPath else {
                 return
             }
-        } else {
-            return
-        }
-        if let thumbnail = createThumbnail(from: URL(fileURLWithPath: videoPath)) {
-            if let imageData = thumbnail.jpegData(compressionQuality: 0.7) {
-                do {
-                    try imageData.write(to: URL(fileURLWithPath: thumbnailPath))
-                } catch {
+            
+            let directory = (thumbnailPath as NSString).deletingLastPathComponent
+            do {
+                try FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: nil)
+            } catch {}
+            
+            if let thumbnail = createThumbnail(from: URL(fileURLWithPath: videoPath)) {
+                if let imageData = thumbnail.jpegData(compressionQuality: 0.7) {
+                    do {
+                        try imageData.write(to: URL(fileURLWithPath: thumbnailPath))
+                    } catch {
+                        try? Data().write(to: URL(fileURLWithPath: thumbnailPath))
+                    }
+                } else {
                     try? Data().write(to: URL(fileURLWithPath: thumbnailPath))
                 }
             } else {
                 try? Data().write(to: URL(fileURLWithPath: thumbnailPath))
             }
-        } else {
-            try? Data().write(to: URL(fileURLWithPath: thumbnailPath))
         }
-        if FileManager.default.fileExists(atPath: videoPath) {
-        } else {}
-        sendVideoMessage(videoPath, thumbnailPath)
-        onSendVideo?(URL(fileURLWithPath: videoPath), URL(fileURLWithPath: thumbnailPath))
+        
+        if let thumbnailPath = thumbnailPath {
+            sendVideoMessage(videoPath, thumbnailPath)
+            onSendVideo?(URL(fileURLWithPath: videoPath), URL(fileURLWithPath: thumbnailPath))
+        }
     }
 
     private func createThumbnail(from videoURL: URL) -> UIImage? {
@@ -765,7 +878,30 @@ private struct MessageInputView: View {
 
     private func sendTextMessage() {
         let text = getSendText()
-        messageManager.sendTextMessage(text)
+        
+        // Convert mention positions from display position to send text position
+        var convertedMentionList: [MentionInfo] = []
+        if let attributedString = textEditorState.displayText {
+            for mention in mentionList {
+                let convertedStartIndex = convertDisplayPositionToTextPosition(mention.startIndex, in: attributedString)
+                let convertedMention = MentionInfo(
+                    userID: mention.userID,
+                    displayName: mention.displayName,
+                    startIndex: convertedStartIndex,
+                    length: mention.length
+                )
+                convertedMentionList.append(convertedMention)
+            }
+        }
+        
+        messageManager.sendTextMessage(text, mentionList: convertedMentionList)
+        
+        // Clear draft after sending message
+        conversationStore.setConversationDraft(conversationID, draft: nil, completion: nil)
+        
+        // Clear mention list
+        mentionList.removeAll()
+        
         textEditorState.displayText = nil
         withAnimation {
             textHeight = 36
@@ -812,6 +948,150 @@ private struct MessageInputView: View {
         }
     }
 
+    // MARK: - Mention Support
+    
+    /// Check if current conversation is a group chat
+    private var isGroupChat: Bool {
+        return conversationID.hasPrefix("group_")
+    }
+    
+    /// Extract group ID from conversation ID
+    private var groupID: String {
+        if conversationID.hasPrefix("group_") {
+            return String(conversationID.dropFirst(6))
+        }
+        return conversationID
+    }
+    
+    /// Find mention to delete when backspace is pressed at given position
+    /// Only triggers when cursor is inside the mention text (not at the position right after it)
+    private func findMentionToDelete(at position: Int) -> MentionInfo? {
+        for mention in mentionList {
+            // Check if deletion position is strictly within mention range
+            // position > startIndex: cursor is after the "@"
+            // position < endIndex: cursor is before the trailing space (not at or after it)
+            if position > mention.startIndex && position < mention.endIndex {
+                return mention
+            }
+        }
+        return nil
+    }
+    
+    /// Insert multiple mentions into text and update mention list
+    private func insertMentions(_ mentions: [MentionInfo], atPosition: Int) {
+        guard !mentions.isEmpty else { return }
+        guard let attributedString = textEditorState.displayText else { return }
+        
+        // Convert atPosition (in displayText) to position in text with emoji tags
+        let adjustedPosition = convertDisplayPositionToTextPosition(atPosition, in: attributedString)
+        var currentText = getSendText()
+        
+        // Handle empty text case (only "@" was typed)
+        if currentText.isEmpty {
+            currentText = "@"
+        }
+        
+        // The "@" character is already in the text at adjustedPosition
+        // We need to replace it with "@name1 @name2 ..."
+        let atIndex = currentText.index(currentText.startIndex, offsetBy: min(adjustedPosition, currentText.count))
+        let afterAtIndex = currentText.index(after: atIndex)
+        
+        // Build combined mention text: "@name1 @name2 @name3 "
+        var combinedMentionText = ""
+        var newMentions: [MentionInfo] = []
+        var currentOffset = adjustedPosition
+        
+        for (index, mention) in mentions.enumerated() {
+            var newMention = mention
+            newMention.startIndex = currentOffset
+            
+            if index == 0 {
+                // First mention replaces the existing "@"
+                combinedMentionText += mention.mentionText
+            } else {
+                // Subsequent mentions add "@name "
+                combinedMentionText += mention.mentionText
+            }
+            
+            newMentions.append(newMention)
+            currentOffset += mention.mentionText.count
+        }
+        
+        // Replace "@" with combined mention text
+        currentText.replaceSubrange(atIndex..<afterAtIndex, with: combinedMentionText)
+        
+        // Update existing mentions' positions (those after the insertion point)
+        let insertedLength = combinedMentionText.count - 1 // -1 because we're replacing "@"
+        for i in 0..<mentionList.count {
+            if mentionList[i].startIndex > adjustedPosition {
+                mentionList[i].startIndex += insertedLength
+            }
+        }
+        
+        // Add new mentions to list
+        mentionList.append(contentsOf: newMentions)
+        
+        // Update text editor state
+        let newAttributedString = EmojiManager.shared.createAttributedStringWithTextAndStyle(
+            text: currentText,
+            withFont: normalFont,
+            textColor: normalColor
+        )
+        textEditorState.displayText = newAttributedString
+    }
+    
+    /// Insert mention into text and update mention list
+    private func insertMention(_ mention: MentionInfo, atPosition: Int) {
+        insertMentions([mention], atPosition: atPosition)
+    }
+    
+    /// Remove mention from list and update positions
+    private func removeMention(_ mention: MentionInfo) {
+        mentionList.removeAll { $0.userID == mention.userID && $0.startIndex == mention.startIndex }
+        
+        // Update positions of mentions after the removed one
+        for i in 0..<mentionList.count {
+            if mentionList[i].startIndex > mention.startIndex {
+                mentionList[i].startIndex -= mention.length
+            }
+        }
+    }
+    
+    /// Convert position in displayText (where emoji image = 1 char) to position in text with emoji tags
+    /// e.g., "今天🥱@" position 3 -> "今天[TUIEmoji_Yawn]@" position 17
+    private func convertDisplayPositionToTextPosition(_ displayPosition: Int, in attributedString: NSAttributedString) -> Int {
+        var textPosition = 0
+        var displayPos = 0
+        
+        attributedString.enumerateAttributes(in: NSRange(location: 0, length: attributedString.length), options: []) { attributes, range, stop in
+            if displayPos >= displayPosition {
+                stop.pointee = true
+                return
+            }
+            
+            if let attachment = attributes[.attachment] as? EmojiTextAttachment {
+                // Emoji image takes 1 char in display, but emoji tag takes multiple chars in text
+                if let emojiTag = attachment.emojiTag {
+                    textPosition += emojiTag.count
+                } else {
+                    textPosition += "[emoji]".count
+                }
+                displayPos += range.length
+            } else {
+                let charsToAdd = min(range.length, displayPosition - displayPos)
+                textPosition += charsToAdd
+                displayPos += charsToAdd
+            }
+        }
+        
+        // Handle remaining position if not fully consumed
+        if displayPos < displayPosition {
+            textPosition += displayPosition - displayPos
+        }
+        
+        return textPosition
+    }
+
     private func getSendText() -> String {
         guard let attributedString = textEditorState.displayText else { return "" }
         var resultText = ""
@@ -837,5 +1117,76 @@ private struct MessageInputView: View {
             resultText += attributedString.attributedSubstring(from: textRange).string
         }
         return resultText
+    }
+    
+    private func saveDraftWithDebounce() {
+        // Cancel previous work item
+        draftSaveWorkItem?.cancel()
+        
+        // Create new work item with 800ms debounce
+        let workItem = DispatchWorkItem {
+            self.saveDraftImmediately()
+        }
+        draftSaveWorkItem = workItem
+        
+        // Execute after 800ms
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: workItem)
+    }
+    
+    private func saveDraftImmediately() {
+        let draftText = getSendText()
+        
+        if draftText.isEmpty {
+            // Clear draft if input is empty
+            conversationStore.setConversationDraft(conversationID, draft: nil, completion: nil)
+        } else {
+            // Save draft with emoji codes
+            conversationStore.setConversationDraft(conversationID, draft: draftText, completion: nil)
+        }
+    }
+    
+    private func loadDraft() {
+        conversationStore.fetchConversationInfo(conversationID) { result in
+            switch result {
+            case .success:
+                // Get the conversation info from state
+                DispatchQueue.main.async {
+                    // Access the conversation list state to find our conversation
+                    let conversations = conversationStore.state.value.conversationList
+                    if let conversation = conversations.first(where: { $0.conversationID == conversationID }),
+                       let draft = conversation.draft,
+                       !draft.isEmpty
+                    {
+                        // Set flag to prevent triggering save during load
+                        isLoadingDraft = true
+                        
+                        // Convert emoji codes to AttributedString with images
+                        let draftAttributedString = EmojiManager.shared.createAttributedStringFromEmojiCodes(from: draft)
+                        
+                        // Set the text editor state
+                        textEditorState.displayText = draftAttributedString
+                        
+                        // Auto focus and move cursor to the end after draft is loaded
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            textEditorState.becomeFirstResponder?()
+                            // Move cursor to the end of the text
+                            if let textView = textEditorState.becomeFirstResponder as? (() -> Void) {
+                                // The cursor position will be set in updateUIView
+                            }
+                        }
+                        
+                        // Reset flag after a short delay to allow UI update
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                            isLoadingDraft = false
+                        }
+                        
+                        // Update height to accommodate the draft content
+                        // Height will be automatically calculated by the text editor
+                    }
+                }
+            case .failure(let error):
+                print(">>>>> Failed to load draft: \(error.message)")
+            }
+        }
     }
 }

@@ -47,10 +47,13 @@ public struct ConfigGroupInfoView: View {
                 leading: Button(LocalizedChatString("Cancel")) {
                     onBack()
                     presentationMode.wrappedValue.dismiss()
-                },
+                }
+                .foregroundColor(themeState.colors.textColorLink),
+
                 trailing: Button(LocalizedChatString("CreateFinish")) {
                     createGroup()
                 }
+                .foregroundColor(themeState.colors.textColorLink)
                 .disabled(groupName.isEmpty || members.isEmpty)
             )
             .onAppear {

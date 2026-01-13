@@ -11,7 +11,13 @@ struct FileMessageView: View {
     let shouldHighlight: Bool
 
     var body: some View {
-        VStack(alignment: isLeft ? .trailing : .leading, spacing: 4) {
+        HStack(alignment: .bottom, spacing: 4) {
+            // Download button on left side for right-aligned messages
+            if !isLeft && messageBody.filePath == nil {
+                downloadButton
+            }
+
+            // File bubble
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Image(systemName: FilePreviewManager.fileTypeIcon(for: messageBody.fileName ?? "unknown"))
@@ -31,35 +37,31 @@ struct FileMessageView: View {
             }
             .padding(12)
             .frame(maxWidth: 250, alignment: .leading)
-            .bubbleBackground(isSelf: isSelf, isLeft: isLeft, shouldHighlight: shouldHighlight)
+            .bubbleBackground(isSelf: isSelf, isLeft: isLeft, shouldHighlight: shouldHighlight, message: message)
             .contentShape(Rectangle())
             .onTapGesture {
                 if let filePath = messageBody.filePath {
                     FilePreviewManager.openFile(at: filePath)
                 }
             }
-            if messageBody.filePath == nil {
-                Button(action: {
-                    downloadFile(messageBody)
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle.fill")
-                            .font(.system(size: 20))
-                        Text(LocalizedChatString("Download"))
-                            .font(.system(size: 12, weight: .medium))
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(themeState.colors.buttonColorPrimaryDefault.opacity(0.1))
-                    .foregroundColor(themeState.colors.buttonColorPrimaryDefault)
-                    .cornerRadius(12)
-                }
-                .buttonStyle(PlainButtonStyle())
-                .contentShape(Rectangle())
-                .padding(.leading, isSelf ? 0 : 8)
-                .padding(.trailing, isSelf ? 8 : 0)
+
+            // Download button on right side for left-aligned messages
+            if isLeft && messageBody.filePath == nil {
+                downloadButton
             }
         }
+    }
+
+    private var downloadButton: some View {
+        Button(action: {
+            downloadFile(messageBody)
+        }) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.system(size: 18))
+                .foregroundColor(themeState.colors.buttonColorPrimaryDefault)
+        }
+        .buttonStyle(PlainButtonStyle())
+        .contentShape(Rectangle())
     }
 
     private func downloadFile(_ messageBody: MessageBody) {

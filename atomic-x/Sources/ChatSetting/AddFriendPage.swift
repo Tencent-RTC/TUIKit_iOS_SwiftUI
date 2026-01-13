@@ -194,7 +194,7 @@ private struct AddFriendSheet: View {
                 Button(LocalizedChatString("Cancel")) {
                     presentationMode.wrappedValue.dismiss()
                 }
-                .foregroundColor(themeState.colors.textColorSecondary)
+                .foregroundColor(themeState.colors.textColorLink)
                 
                 Spacer()
                 

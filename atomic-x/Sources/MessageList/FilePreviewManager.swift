@@ -36,10 +36,16 @@ class FilePreviewManager {
         let previewController = QLPreviewController()
         let filePreview = FilePreviewController(fileURL: fileURL)
         previewController.dataSource = filePreview
-        if let rootVC = UIApplication.shared.windows.first?.rootViewController {
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.windows.first?.rootViewController {
+            // Find the topmost presented view controller
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController {
+                topVC = presented
+            }
             let coordinator = FilePreviewCoordinator(fileURL: fileURL)
             objc_setAssociatedObject(previewController, &AssociatedObjectKey.coordinator, coordinator, .OBJC_ASSOCIATION_RETAIN)
-            rootVC.present(previewController, animated: true, completion: nil)
+            topVC.present(previewController, animated: true, completion: nil)
         }
     }
 

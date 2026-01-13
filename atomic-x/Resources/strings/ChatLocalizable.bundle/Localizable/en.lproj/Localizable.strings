@@ -243,7 +243,9 @@
 "MessageTypeRiskImage" = "[Illegal pictures]";
 "MessageTypeRiskVoice" = "[Illegal voice]";
 "MessageTypeRiskVideo" = "[Illegal video]";
+"MessageTypeMergedHistory" = "[Chat History]";
 "MessageTypeLastMsgCountFormat" = "messages";
+"MessageTypeSecurityStrikeInfo" = "Sensitive content involved";
 "MessageTypeSecurityStrike" = "Sensitive content involved, sending failed";
 "MessageTypeSecurityStrikeVoice" = "Sensitive content involved, cannot be listened to";
 "MessageTypeSecurityStrikeImage" = "Sensitive content involved and cannot be viewed";
@@ -345,6 +347,7 @@
 "RelayOneByOneForward" = "One-by-One Forward";
 "RelayCombineForwad" = "Combine and Forward";
 "RelayGroupChatHistory" = "Group Chat History";
+"RelayC2CChatHistoryFormat" = "%@'s Chat History";
 "RelayChatHistoryForSomebodyFormat" = "Chat History of %@ and %@";
 "RelayErrorForwardFormat" = "@\"Failed to forward: code:%d, desc:%@\"";
 "RelayTargetCreateNewChat" = "New Chat";
@@ -739,7 +742,7 @@
 "GroupCreated" = "Group created";
 "CommunityCreated" = "Community created";
 "ChooseAnAction" = "Choose an action";
-"MessageCount" = "counts";
+"MessageCount" = " messages";
 "QuickReplyOK" = "OK, no problem";
 "QuickReplyWait" = "Wait, I'll reply soon";
 "QuickReplyThanks" = "Thanks!";
@@ -778,3 +781,12 @@
 "GetGroupSettingInfoFailed" = "Failed to get group setting information";
 "VoiceSendMessageDesc" = "Swipe up to cancel or Release to send";
 "VoiceSendMessageCancelDesc" = "Release to cancel";
+"MessageReadReceipt" = "Message Read Receipt";
+"MessageReadReceiptEnabledDesc" = "If disabled, the message read status is hidden for all your messages and for all the messages sent by members in a chat.";
+"MessageReadReceiptDisabledDesc" = "If enabled, the message read status is displayed for all your messages and for all the messages sent by members in a chat.";
+"Style" = "Appearance";
+
+"MentionSelectMember" = "Select Member";
+"MentionAll" = "All";
+"MentionAtAllTag" = "[@All]";
+"MentionAtMeTag" = "[@Me]";

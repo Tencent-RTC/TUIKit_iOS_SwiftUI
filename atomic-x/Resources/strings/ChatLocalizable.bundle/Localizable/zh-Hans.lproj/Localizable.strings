@@ -243,7 +243,9 @@
 "MessageTypeRiskImage" = "[违规图片]";
 "MessageTypeRiskVoice" = "[违规语音]";
 "MessageTypeRiskVideo" = "[违规视频]";
+"MessageTypeMergedHistory" = "[聊天记录]";
 "MessageTypeLastMsgCountFormat" = "条";
+"MessageTypeSecurityStrikeInfo" = "涉及敏感内容";
 "MessageTypeSecurityStrike" = "涉及敏感内容，发送失败";
 "MessageTypeSecurityStrikeVoice" = "涉及敏感内容，无法收听";
 "MessageTypeSecurityStrikeImage" = "涉及敏感内容，无法查看";
@@ -345,6 +347,7 @@
 "RelayOneByOneForward" = "逐条转发";
 "RelayCombineForwad" = "合并转发";
 "RelayGroupChatHistory" = "群聊的聊天记录";
+"RelayC2CChatHistoryFormat" = "%@的聊天记录";
 "RelayChatHistoryForSomebodyFormat" = "%@和%@的聊天记录";
 "RelayErrorForwardFormat" = "@\"转发失败, code:%d, desc:%@\"";
 "RelayTargetCreateNewChat" = "创建新聊天";
@@ -358,11 +361,11 @@
 "RelayOneByOnyOverLimit" = "转发消息过多，暂不支持逐条转发";
 "RelayPluginNotAllowed" = "投票/接龙消息不支持转发";
 "SearchItemHeaderTitleContact" = "联系人";
-"SearchItemFooterTitleContact" = "查看更多联系人";
+"SearchItemFooterTitleContact" = "查看更多";
 "SearchItemHeaderTitleGroup" = "群聊";
-"SearchItemFooterTitleGroup" = "查看更多群聊";
+"SearchItemFooterTitleGroup" = "查看更多";
 "SearchItemHeaderTitleChatHistory" = "聊天记录";
-"SearchItemFooterTitleChatHistory" = "查看更多聊天记录";
+"SearchItemFooterTitleChatHistory" = "查看更多";
 "SearchResultMatchFormat" = "包含:%@";
 "SearchResultMatchGroupIDFormat" = "包含群ID:%@";
 "SearchResultMatchGroupMember" = "包含群成员:";
@@ -739,7 +742,7 @@
 "GroupCreated" = "群聊已创建";
 "CommunityCreated" = "社区已创建";
 "ChooseAnAction" = "选择操作";
-"MessageCount" = "条";
+"MessageCount" = " 条";
 "QuickReplyOK" = "好的，没问题";
 "QuickReplyWait" = "稍等，我马上回复";
 "QuickReplyThanks" = "谢谢！";
@@ -778,3 +781,13 @@
 "GetGroupSettingInfoFailed" = "获取群聊信息失败";
 "VoiceSendMessageDesc" = "向上滑动取消或松开发送";
 "VoiceSendMessageCancelDesc" = "松开取消发送";
+
+"MessageReadReceipt" = "消息阅读状态";
+"MessageReadReceiptEnabledDesc" = "关闭后，您收发的消息均不带消息阅读状态，您将无法看到对方是否已读，同时对方也无法看到您是否已读。";
+"MessageReadReceiptDisabledDesc" = "开启后，您在群聊中收发的消息均带有消息阅读状态，并且可以看到对方是否已读。与您单聊的好友若也开启了消息阅读状态，您与好友在单聊中收发的消息也将带有消息阅读状态。";
+"Style" = "外观";
+
+"MentionSelectMember" = "选择群成员";
+"MentionAll" = "所有人";
+"MentionAtAllTag" = "[@所有人]";
+"MentionAtMeTag" = "[有人@我]";

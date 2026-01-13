@@ -1,7 +1,7 @@
 
 Pod::Spec.new do |s|
     s.name             = 'ChatUIKit'
-    s.version          = '3.5.0'
+    s.version          = '3.6.0'
     s.summary          = 'Chat UIKit Component'
     s.homepage         = 'https://trtc.io/document/chat-overview?product=chat&menulabel=uikit&platform=ios%20and%20macos'
     s.license          = { :type => 'Proprietary',
@@ -11,7 +11,7 @@ Pod::Spec.new do |s|
     }
     s.author           = 'tencent video cloud'
     s.source           = { :git => 'https://github.com/Tencent-RTC/TUIKit_iOS_SwiftUI', :tag => s.version }
-    s.ios.deployment_target = '14.0'
+    s.ios.deployment_target = '15.0'
     s.swift_version    = '5.0'
 
     s.dependency 'Kingfisher'

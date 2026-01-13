@@ -206,7 +206,7 @@
     [_recordCore stopCameraPreview];
     _ctrlView.flashState = NO;
     if (_resultCallback != nil) {
-        _resultCallback(nil, nil);
+        _resultCallback(nil, nil, 0);
     }
 }
 
@@ -221,6 +221,7 @@
     if (res == -5) {
         [VideoRecorderAuthorizationPrompterController showPrompterDialogInViewController:self prompType:NoSignature];
     }
+    _recordDuration = 0;
     return;
 }
 
@@ -255,6 +256,10 @@
 
 #pragma mark - TXUGCRecordListener protocol
 - (void)onRecordProgress:(NSInteger)milliSecond {
+    if (milliSecond == 0) {
+        return;
+    }
+    
     _recordDuration = milliSecond / 1000.0;
     [_ctrlView setProgress:_recordDuration / _maxDurationSeconds duration:_recordDuration];
     if (milliSecond / 1000.0 >= _maxDurationSeconds) {
@@ -275,6 +280,7 @@
         return;
     }
 
+    NSLog(@"on record complete record duration: %f", _recordDuration);
     if (_recordDuration < _minDurationSeconds) {
         if ([[VideoRecorderConfigInternal sharedInstance] getRecordeMode] == MIXED_RECORD_MODE) {
             [self takePhoto];
@@ -283,7 +289,6 @@
     }
 
     _recorderResult = result;
-    _recordDuration = 0;
     _videoPlayerView.hidden = NO;
     _videoPlayerView.frame = self.view.frame;
     _ctrlView.hidden = YES;
@@ -293,7 +298,7 @@
 #pragma mark - VideoPreviewViewDelegate
 - (void)previewAccept:(NSString*) videoPath image:(UIImage*) image {
     if (_resultCallback != nil) {
-        _resultCallback(videoPath, image);
+        _resultCallback(videoPath, image, self->_recordDuration * 1000);
     }
 }
 
@@ -407,7 +412,7 @@
             
             if (xProgress > 0.5 || xVelocity > 1000 || yVelocity > 0.5 || yProgress > 1000) {
                 if (_resultCallback) {
-                    _resultCallback(nil, nil);
+                    _resultCallback(nil, nil, 0);
                 }
             }
             break;

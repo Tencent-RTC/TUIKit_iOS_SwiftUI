@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'AtomicX'
-  s.version          = '3.5.0'
+  s.version          = '3.6.0'
   s.summary          = 'A collection of UI components and utilities for AtomicX.'
   s.homepage         = 'https://trtc.io/document/chat-overview?product=chat&menulabel=uikit&platform=ios%20and%20macos'
   s.license          = { :type => 'Proprietary',
@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
   }
   s.author           = 'tencent video cloud'
   s.source           = { :git => 'https://github.com/Tencent-RTC/TUIKit_iOS_SwiftUI', :tag => s.version }
-  s.ios.deployment_target = '13.0'
+  s.ios.deployment_target = '15.0'
 
   # Main spec
   s.source_files     = 'Sources/**/*.{swift,h,m}'
@@ -19,6 +19,7 @@ Pod::Spec.new do |s|
 
   s.dependency 'Kingfisher', '~> 7.0'
   s.dependency 'SnapKit'
+  s.dependency 'SDWebImage'
   s.static_framework = true
 
   # Live
@@ -40,6 +41,7 @@ Pod::Spec.new do |s|
         'Sources/AudioPlayer/*.{swift,h,m}',
         'Sources/BaseComponent/**/*.{swift,h,m}',
         'Sources/ChatSetting/*.{swift,h,m}',
+        'Sources/AlbumPicker/**/*.{swift,h,m}',
         'Sources/ContactList/*.{swift,h,m}',
         'Sources/ConversationList/*.{swift,h,m}',
         'Sources/EmojiPicker/*.{swift,h,m}',
@@ -53,10 +55,10 @@ Pod::Spec.new do |s|
         'Sources/VideoPlayer/*.{swift,h,m}',
         'Sources/AudioRecorder/**/*.{swift,h,m}',
         'Sources/VideoRecorder/**/*.{swift,h,m}',
-        'Sources/UserPicker/**/*.{swift,h,m}'
+        'Sources/UserPicker/**/*.{swift,h,m}',
     ]
     chat.resource_bundles = {
-      'AtomicXBundle' => ['Resources/assets/chat/**/*.{xcassets,json,png}', 'Resources/strings/**/*.{bundle,xcstrings}']
+      'AtomicXBundle' => ['Resources/assets/chat/**/*.{xcassets,json,png,bundle}', 'Resources/strings/**/*.{bundle,xcstrings}']
     }
     chat.dependency 'AtomicXCore'
     chat.dependency 'Masonry'
@@ -68,5 +70,14 @@ Pod::Spec.new do |s|
     room.resource_bundles = {
       'AtomicXBundle' => ['Resources/assets/room/**/*.{xcassets,json,png}', 'Resources/strings/**/*.{bundle,xcstrings}']
     }
-  end 
+  end
+  
+    # Call
+  s.subspec 'Call' do |call|
+    call.source_files     = 'Sources/CallView/**/*.{swift,h,m}','Sources/BaseComponent/**/*.{swift,h,m}'
+    call.resource_bundles = {
+      'AtomicXBundle' => ['Resources/assets/call/**/*.{xcassets,json,png}', 'Resources/strings/**/*.{bundle,xcstrings}']
+    }
+    call.dependency 'AtomicXCore'
+  end
 end

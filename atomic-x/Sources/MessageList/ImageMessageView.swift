@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ImageMessageView: View {
     @EnvironmentObject var themeState: ThemeState
+    @Environment(\.isInMergedDetailView) private var isInMergedDetailView
     @State private var isImageLoading = false
     let messageBody: MessageBody
     let message: MessageInfo
@@ -39,13 +40,26 @@ struct ImageMessageView: View {
                         switch result {
                         case .success:
                             isImageLoading = false
-                        case .failure(let error):
+                        case .failure:
                             isImageLoading = false
                         }
                     })
                 }
             }
         }
+        .overlay(
+            Group {
+                if MessageListHelper.shouldShowReadReceipt(message: message, isInMergedDetailView: isInMergedDetailView) {
+                    let iconName = MessageListHelper.getReceiptIconName(message: message)
+                    Image(iconName, bundle: AtomicXChatResources.resourceBundle)
+                        .resizable()
+                        .frame(width: 14, height: 14)
+                        .padding(.trailing, 8)
+                        .padding(.bottom, 6)
+                }
+            },
+            alignment: .bottomTrailing
+        )
         .contentShape(Rectangle())
         .onTapGesture(
             perform: {

@@ -51,6 +51,7 @@ public struct GroupChatSetting: View {
     @State private var conversationStore: ConversationListStore
     private let onSendMessageClick: (() -> Void)?
     private let onGroupDelete: (() -> Void)?
+    private let onGroupMemberClick: ((String) -> Void)?
 
     private enum PermissionActionSheetType {
         case joinOption
@@ -60,12 +61,14 @@ public struct GroupChatSetting: View {
     public init(
         groupID: String,
         onSendMessageClick: (() -> Void)? = nil,
-        onGroupDelete: (() -> Void)? = nil
+        onGroupDelete: (() -> Void)? = nil,
+        onGroupMemberClick: ((String) -> Void)? = nil
     ) {
         self.groupID = groupID
         self.settingStore = GroupSettingStore.create(groupID: groupID)
         self.onSendMessageClick = onSendMessageClick
         self.onGroupDelete = onGroupDelete
+        self.onGroupMemberClick = onGroupMemberClick
         self.conversationStore = ConversationListStore.create()
     }
 
@@ -145,7 +148,7 @@ public struct GroupChatSetting: View {
         )
         .background(
             NavigationLink(
-                destination: GroupMemberListView(settingStore: settingStore),
+                destination: GroupMemberListView(settingStore: settingStore, onGroupMemberClick: onGroupMemberClick),
                 isActive: $showingGroupMembers
             ) {
                 EmptyView()
@@ -316,6 +319,10 @@ public struct GroupChatSetting: View {
                 permissionBasedSettings
             }
         }
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
     }
 
     private func fetchInitialInfo() {
@@ -411,7 +418,7 @@ public struct GroupChatSetting: View {
                     )
                 }
             }
-            .background(themeState.colors.bgColorOperate)
+            .background(themeState.colors.bgColorTopBar)
             .cornerRadius(12)
             .padding(.horizontal, 16)
             // Group 3: Group Notice, Group Management, Group Type, Join Group Method, Invite to Group Method
@@ -471,7 +478,7 @@ public struct GroupChatSetting: View {
                     )
                 }
             }
-            .background(themeState.colors.bgColorOperate)
+            .background(themeState.colors.bgColorTopBar)
             .cornerRadius(12)
             .padding(.horizontal, 16)
             // Group 4: My Group Nickname
@@ -485,7 +492,7 @@ public struct GroupChatSetting: View {
                         }
                     )
                 }
-                .background(themeState.colors.bgColorOperate)
+                .background(themeState.colors.bgColorTopBar)
                 .cornerRadius(12)
                 .padding(.horizontal, 16)
             }
@@ -535,14 +542,18 @@ public struct GroupChatSetting: View {
                         canViewDetails: canPerformAction(.getGroupMemberInfo),
                         onTap: {
                             if canPerformAction(.getGroupMemberInfo), member.userID != currentUserID {
-                                selectedMemberForDetail = member
-                                showingMemberDetail = true
+                                if let onGroupMemberClick = onGroupMemberClick {
+                                    onGroupMemberClick(member.userID)
+                                } else {
+                                    selectedMemberForDetail = member
+                                    showingMemberDetail = true
+                                }
                             }
                         }
                     )
                 }
             }
-            .background(themeState.colors.bgColorOperate)
+            .background(themeState.colors.bgColorTopBar)
             .cornerRadius(12)
             .padding(.horizontal, 16)
             // Group 7: Red Text Button Area - cell style
@@ -596,7 +607,7 @@ public struct GroupChatSetting: View {
                  }
                   */
             }
-            .background(themeState.colors.bgColorOperate)
+            .background(themeState.colors.bgColorTopBar)
             .cornerRadius(12)
             .padding(.horizontal, 16)
             .padding(.bottom, 20)
@@ -941,7 +952,7 @@ private struct GroupEditView: View {
                 leading: Button(LocalizedChatString("Cancel")) {
                     presentationMode.wrappedValue.dismiss()
                 }
-                .foregroundColor(themeState.colors.textColorSecondary),
+                .foregroundColor(themeState.colors.textColorLink),
                 trailing: Button(LocalizedChatString("Save")) {
                     saveChanges()
                 }
@@ -1203,58 +1214,35 @@ private struct GroupManagementView: View {
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
-                .background(themeState.colors.bgColorOperate)
+                .background(themeState.colors.bgColorTopBar)
                 .padding(.horizontal, 16)
                 if !mutedMembers.isEmpty {
-                    if #available(iOS 15.0, *) {
-                        List {
-                            ForEach(mutedMembers, id: \.userID) { member in
-                                MutedMemberRow(member: member, onUnmute: {})
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-                                    .listRowBackground(themeState.colors.bgColorOperate)
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive, action: {
-                                            unmuteMember(member)
-                                        }) {
-                                            Text("删除")
-                                        }
-                                    }
-                            }
-                        }
-                        .listStyle(PlainListStyle())
-                        .padding(.horizontal, 16)
-                    } else {
-                        // iOS 13-14 fallback
-                        VStack(spacing: 1) {
-                            ForEach(mutedMembers, id: \.userID) { member in
-                                MutedMemberRow(
-                                    member: member,
-                                    onUnmute: {
-                                        unmuteMember(member)
-                                    }
-                                )
-                                .contextMenu {
-                                    Button(action: {
+                    List {
+                        ForEach(mutedMembers, id: \.userID) { member in
+                            MutedMemberRow(member: member, onUnmute: {})
+                                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                                .listRowBackground(themeState.colors.bgColorTopBar)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive, action: {
                                         unmuteMember(member)
                                     }) {
-                                        HStack {
-                                            Image(systemName: "speaker.wave.2")
-                                            Text("取消禁言")
-                                        }
+                                        Text(LocalizedChatString("Delete"))
                                     }
                                 }
-                            }
                         }
-                        .background(themeState.colors.bgColorOperate)
-                        .padding(.horizontal, 16)
                     }
+                    .listStyle(PlainListStyle())
+                    .padding(.horizontal, 16)
                 }
                 if mutedMembers.isEmpty {
                     Spacer()
                 }
             }
         }
-        .background(themeState.colors.bgColorOperate.opacity(0.1))
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
         .navigationBarTitle(LocalizedChatString("GroupProfileManage"), displayMode: .inline)
         .navigationBarBackButtonHidden(true)
         .navigationBarItems(
@@ -1336,6 +1324,7 @@ private struct GroupManagementView: View {
 // MARK: - Mute Member Selection View
 
 private struct MuteMemberSelectionView: View {
+    @EnvironmentObject var themeState: ThemeState
     @State private var allMembers: [GroupMember] = []
     @State private var currentUserID: String = ""
     let settingStore: GroupSettingStore
@@ -1376,6 +1365,10 @@ private struct MuteMemberSelectionView: View {
             onSelectedChanged: { selectedUsers in
                 muteMembers(selectedUsers)
             }
+        )
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
         )
         .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
             self.allMembers = allMembers
@@ -1454,7 +1447,7 @@ private struct MutedMemberRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
-        .background(themeState.colors.bgColorOperate)
+        .background(themeState.colors.bgColorTopBar)
     }
 }
 
@@ -1468,6 +1461,7 @@ private struct GroupNoticeDetailView: View {
     @State private var notice: String = ""
     @State private var groupType: GroupType = .work
     @State private var currentUserRole: GroupMemberRole = .member
+    @FocusState private var isTextEditorFocused: Bool
     let settingStore: GroupSettingStore
 
     private var canEdit: Bool {
@@ -1482,26 +1476,40 @@ private struct GroupNoticeDetailView: View {
         VStack(spacing: 0) {
             // Content
             VStack(spacing: 20) {
-                if #available(iOS 14.0, *) {
+                if #available(iOS 16.0, *) {
                     TextEditor(text: isEditing ? $editedNotice : .constant(notice))
                         .font(.body)
                         .padding(.horizontal, 16)
                         .padding(.top, 20)
                         .disabled(!isEditing)
-                        .background(themeState.colors.clearColor)
-                } else {
-                    // iOS 13 fallback
-                    ScrollView {
-                        Text(isEditing ? editedNotice : notice)
-                            .font(.body)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.horizontal, 16)
-                            .padding(.top, 20)
-                    }
+                        .scrollContentBackground(.hidden)
+                        .background(themeState.colors.bgColorInput)
+                        .focused($isTextEditorFocused)
+                } else if #available(iOS 14.0, *) {
+                    TextEditor(text: isEditing ? $editedNotice : .constant(notice))
+                        .font(.body)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                        .disabled(!isEditing)
+                        .background(themeState.colors.bgColorInput)
+                        .onAppear { UITextView.appearance().backgroundColor = .clear }
                 }
                 Spacer()
             }
         }
+        .background(
+            themeState.colors.bgColorInput
+                .ignoresSafeArea(edges: .bottom)
+        )
+        .background(
+            NavigationBarConfigurator { nav in
+                let appearance = UINavigationBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                appearance.backgroundColor = UIColor(themeState.colors.bgColorOperate)
+                nav.navigationBar.standardAppearance = appearance
+                nav.navigationBar.scrollEdgeAppearance = appearance
+            }
+        )
         .navigationBarTitle(LocalizedChatString("GroupNotice"), displayMode: .inline)
         .navigationBarBackButtonHidden(true)
         .navigationBarItems(
@@ -1522,6 +1530,7 @@ private struct GroupNoticeDetailView: View {
                             switch result {
                             case .success:
                                 isEditing = false
+                                isTextEditorFocused = false
                             case .failure:
                                 break
                             }
@@ -1530,6 +1539,7 @@ private struct GroupNoticeDetailView: View {
                 } else {
                     editedNotice = notice
                     isEditing = true
+                    isTextEditorFocused = true
                 }
             }
             .foregroundColor(themeState.colors.textColorLink) : nil
@@ -1552,6 +1562,7 @@ private struct GroupNoticeDetailView: View {
 // MARK: - Add Group Member View
 
 private struct AddGroupMemberView: View {
+    @EnvironmentObject var themeState: ThemeState
     @State private var allMembers: [GroupMember] = []
     @State private var friendList: [ContactInfo] = []
     let settingStore: GroupSettingStore
@@ -1608,6 +1619,10 @@ private struct AddGroupMemberView: View {
                 }
             })
         }
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
     }
 
     private func addSelectedMembers(_ selectedUsers: [UserPickerItem]) {
@@ -1634,25 +1649,43 @@ private struct GroupMemberListView: View {
     @State private var currentUserRole: GroupMemberRole = .member
     @State private var currentUserID: String = ""
     let settingStore: GroupSettingStore
+    let onGroupMemberClick: ((String) -> Void)?
 
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
                 LazyVStack(spacing: 1) {
                     ForEach(allMembers, id: \.userID) { member in
-                        GroupMemberListRow(
-                            member: member,
-                            action: {
-                                handleMemberTap(member)
-                            }
-                        )
+                        if #available(iOS 26.0, *) {
+                            // iOS 26+: use contextMenu for proper arrow pointing
+                            GroupMemberListRowContent(member: member)
+                                .contextMenu {
+                                    if member.userID != currentUserID {
+                                        memberContextMenuContent(for: member)
+                                    }
+                                }
+                                .onTapGesture {
+                                    handleMemberTap(member)
+                                }
+                        } else {
+                            // iOS < 26: use tap to show confirmationDialog
+                            GroupMemberListRow(
+                                member: member,
+                                action: {
+                                    handleMemberTap(member)
+                                }
+                            )
+                        }
                     }
                 }
             }
             .background(themeState.colors.bgColorOperate)
             Spacer()
         }
-        .background(themeState.colors.bgColorOperate.opacity(0.1))
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
         .navigationBarTitle(String(format: LocalizedChatString("GroupMemberCountFormat"), allMembers.count), displayMode: .inline)
         .navigationBarBackButtonHidden(true)
         .navigationBarItems(
@@ -1664,9 +1697,15 @@ private struct GroupMemberListView: View {
                     .foregroundColor(themeState.colors.textColorLink)
             }
         )
-        .actionSheet(isPresented: $showingMemberActionSheet) {
-            createMemberActionSheet()
-        }
+        .modifier(MemberActionSheetModifier(
+            isPresented: $showingMemberActionSheet,
+            selectedMember: selectedMember,
+            canPerformAction: canPerformAction,
+            currentUserRole: currentUserRole,
+            onMemberDetail: handleMemberDetail,
+            onSetMemberRole: handleSetMemberRole,
+            onRemoveMember: handleRemoveMember
+        ))
         .background(
             Group {
                 if let member = selectedMemberForDetail {
@@ -1698,50 +1737,57 @@ private struct GroupMemberListView: View {
         }
     }
 
+    // MARK: - Context Menu Content Builder
+    
+    @ViewBuilder
+    private func memberContextMenuContent(for member: GroupMember) -> some View {
+        if canPerformAction(.getGroupMemberInfo) {
+            Button {
+                handleMemberDetail(member)
+            } label: {
+                Label(LocalizedChatString("GroupMemberDetail"), systemImage: "person.crop.circle")
+            }
+        }
+        if member.role != .owner || currentUserRole == .owner {
+            if canPerformAction(.setGroupMemberRole) {
+                if member.role == .admin {
+                    Button {
+                        handleSetMemberRole(member, role: .member)
+                    } label: {
+                        Label(LocalizedChatString("CancelAdmin"), systemImage: "person.badge.minus")
+                    }
+                } else if member.role == .member {
+                    Button {
+                        handleSetMemberRole(member, role: .admin)
+                    } label: {
+                        Label(LocalizedChatString("SetAsAdmin"), systemImage: "person.badge.plus")
+                    }
+                }
+            }
+            if canPerformAction(.removeGroupMember) {
+                Button(role: .destructive) {
+                    handleRemoveMember(member)
+                } label: {
+                    Label(LocalizedChatString("RemoveMember"), systemImage: "person.badge.minus")
+                }
+            }
+        }
+    }
+
     // MARK: - Private Methods
 
     private func handleMemberTap(_ member: GroupMember) {
         if member.userID == currentUserID {
             return
         }
-        selectedMember = member
-        showingMemberActionSheet = true
-    }
-
-    private func createMemberActionSheet() -> ActionSheet {
-        guard let member = selectedMember else {
-            return ActionSheet(title: Text(""))
-        }
-        var buttons: [ActionSheet.Button] = []
-        if canPerformAction(.getGroupMemberInfo) {
-            buttons.append(.default(Text(LocalizedChatString("GroupMemberDetail"))) {
-                handleMemberDetail(member)
-            })
-        }
-        if member.role == .owner && currentUserRole != .owner {
+        if #available(iOS 26.0, *) {
+            // iOS 26+: tap goes to detail directly, long press shows context menu
+            handleMemberDetail(member)
         } else {
-            if canPerformAction(.setGroupMemberRole) {
-                if member.role == .admin {
-                    buttons.append(.default(Text(LocalizedChatString("CancelAdmin"))) {
-                        handleSetMemberRole(member, role: .member)
-                    })
-                } else if member.role == .member {
-                    buttons.append(.default(Text(LocalizedChatString("SetAsAdmin"))) {
-                        handleSetMemberRole(member, role: .admin)
-                    })
-                }
-            }
-            if canPerformAction(.removeGroupMember) {
-                buttons.append(.destructive(Text(LocalizedChatString("RemoveMember"))) {
-                    handleRemoveMember(member)
-                })
-            }
+            // iOS < 26: tap shows action sheet
+            selectedMember = member
+            showingMemberActionSheet = true
         }
-        buttons.append(.cancel(Text(LocalizedChatString("Cancel"))))
-        return ActionSheet(
-            title: Text(member.displayName),
-            buttons: buttons
-        )
     }
 
     private func canPerformAction(_ permission: GroupPermission) -> Bool {
@@ -1753,8 +1799,12 @@ private struct GroupMemberListView: View {
     }
 
     private func handleMemberDetail(_ member: GroupMember) {
-        selectedMemberForDetail = member
-        showingMemberDetail = true
+        if let onGroupMemberClick = onGroupMemberClick {
+            onGroupMemberClick(member.userID)
+        } else {
+            selectedMemberForDetail = member
+            showingMemberDetail = true
+        }
     }
 
     private func handleSetMemberRole(_ member: GroupMember, role: GroupMemberRole) {
@@ -1770,6 +1820,106 @@ private struct GroupMemberListView: View {
             members: [member],
             completion: nil
         )
+    }
+}
+
+// MARK: - Member Action Sheet Modifier (iOS < 26)
+
+private struct MemberActionSheetModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let selectedMember: GroupMember?
+    let canPerformAction: (GroupPermission) -> Bool
+    let currentUserRole: GroupMemberRole
+    let onMemberDetail: (GroupMember) -> Void
+    let onSetMemberRole: (GroupMember, GroupMemberRole) -> Void
+    let onRemoveMember: (GroupMember) -> Void
+    
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            // iOS 26+: no action sheet needed, using contextMenu instead
+            content
+        } else {
+            content
+                .confirmationDialog(
+                    selectedMember?.displayName ?? "",
+                    isPresented: $isPresented,
+                    titleVisibility: .visible
+                ) {
+                    if let member = selectedMember {
+                        if canPerformAction(.getGroupMemberInfo) {
+                            Button(LocalizedChatString("GroupMemberDetail")) {
+                                onMemberDetail(member)
+                            }
+                        }
+                        if member.role != .owner || currentUserRole == .owner {
+                            if canPerformAction(.setGroupMemberRole) {
+                                if member.role == .admin {
+                                    Button(LocalizedChatString("CancelAdmin")) {
+                                        onSetMemberRole(member, .member)
+                                    }
+                                } else if member.role == .member {
+                                    Button(LocalizedChatString("SetAsAdmin")) {
+                                        onSetMemberRole(member, .admin)
+                                    }
+                                }
+                            }
+                            if canPerformAction(.removeGroupMember) {
+                                Button(LocalizedChatString("RemoveMember"), role: .destructive) {
+                                    onRemoveMember(member)
+                                }
+                            }
+                        }
+                        Button(LocalizedChatString("Cancel"), role: .cancel) {}
+                    }
+                }
+        }
+    }
+}
+
+// MARK: - Group Member List Row Content (shared UI)
+
+private struct GroupMemberListRowContent: View {
+    @EnvironmentObject var themeState: ThemeState
+    let member: GroupMember
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Avatar(
+                url: member.avatarURL,
+                name: member.displayName
+            )
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 8) {
+                    Text(member.displayName)
+                        .font(.body)
+                        .foregroundColor(themeState.colors.textColorPrimary)
+                    if member.role == .owner {
+                        Text(LocalizedChatString("GroupOwnerLabel"))
+                            .font(.caption)
+                            .foregroundColor(Colors.GrayLight1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Colors.OrangeLight6)
+                            .cornerRadius(4)
+                    } else if member.role == .admin {
+                        Text(LocalizedChatString("AdminLabel"))
+                            .font(.caption)
+                            .foregroundColor(Colors.GrayLight1)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Colors.ThemeLight6)
+                            .cornerRadius(4)
+                    }
+                }
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(themeState.colors.textColorSecondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(themeState.colors.bgColorTopBar)
     }
 }
 
@@ -1818,13 +1968,14 @@ private struct GroupMemberListRow: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(themeState.colors.bgColorOperate)
+            .background(themeState.colors.bgColorTopBar)
         }
         .buttonStyle(PlainButtonStyle())
     }
 }
 
 struct TransferOwnershipView: View {
+    @EnvironmentObject var themeState: ThemeState
     @State private var allMembers: [GroupMember] = []
     @State private var currentUserID: String = ""
     let settingStore: GroupSettingStore
@@ -1852,6 +2003,10 @@ struct TransferOwnershipView: View {
             }
         )
         .navigationBarTitle(LocalizedChatString("GroupTransferOwner"), displayMode: .inline)
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
         .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
             self.allMembers = allMembers
         }

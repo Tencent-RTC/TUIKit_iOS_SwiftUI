@@ -2,7 +2,7 @@
 // Author: eddardliu
 
 #import "VideoRecorderCommon.h"
-#import "NSArray+Functional.h"
+#import "VideoRecorderNSArray+Functional.h"
 
 #define ChatEngineLanguageKey @"AtomicXLanguageKey"
 #define BundleResourceUrlPrefix  @"file:///asset/"

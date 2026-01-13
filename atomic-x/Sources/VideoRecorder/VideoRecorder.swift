@@ -28,7 +28,6 @@ public class VideoRecorderConfig {
     var minDurationMs: Int?
     var maxDurationMs: Int?
     var isDefaultFrontCamera: Bool?
-    var primaryColor: String?
     var isSupportEdit: Bool?
     var isSupportBeauty: Bool?
     var isSupportTorch: Bool?
@@ -41,7 +40,6 @@ public class VideoRecorderConfig {
          minDurationMs: Int? = nil,
          maxDurationMs: Int? = nil,
          isDefaultFrontCamera: Bool? = nil,
-         primaryColor: String? = nil,
          isSupportEdit: Bool? = nil,
          isSupportBeauty: Bool? = nil,
          isSupportTorch: Bool? = nil,
@@ -52,7 +50,6 @@ public class VideoRecorderConfig {
         self.recordMode = recordMode
         self.minDurationMs = minDurationMs
         self.maxDurationMs = maxDurationMs
-        self.primaryColor = primaryColor
         self.isDefaultFrontCamera = isDefaultFrontCamera
         self.isSupportEdit = isSupportEdit
         self.isSupportBeauty = isSupportBeauty
@@ -62,21 +59,26 @@ public class VideoRecorderConfig {
 }
 
 public struct VideoRecorder: View {
-    @Environment(\.presentationMode) var presentationMode
+    @EnvironmentObject var themeState: ThemeState
 
     let config: VideoRecorderConfig?
-    let onMediaCaptured: (String?, MediaType) -> Void
-
-
-    public init(config: VideoRecorderConfig?, onMediaCaptured: @escaping (String?, MediaType) -> Void) {
+    let onVideoCaptured: (_ path: String?, _ durationMs: Int, _ thumbnailPath : String?)  -> Void
+    let onPhotoCaptured: (_ path: String?) -> Void
+    
+    
+    public init(config: VideoRecorderConfig?,
+                onVideoCaptured: @escaping (String?, Int, String?) -> Void,
+                onPhotoCaptured: @escaping (String?) -> Void)
+                 {
         self.config = config
-        self.onMediaCaptured = onMediaCaptured
+        self.onVideoCaptured = onVideoCaptured
+        self.onPhotoCaptured = onPhotoCaptured
     }
 
     public var body: some View {
         ZStack {
             #if canImport(UIKit)
-            VideoRecorderViewWrapper(config: config, onMediaCaptured: onMediaCaptured)
+            VideoRecorderViewWrapper(config: config, onVideoCaptured: onVideoCaptured, onPhotoCaptured: onPhotoCaptured, primaryColor: themeState.currentPrimaryColor)
                 .edgesIgnoringSafeArea(.all)
             #else
             EmptyView()

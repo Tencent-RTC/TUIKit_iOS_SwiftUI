@@ -7,7 +7,7 @@ public class KeyboardHandler: ObservableObject {
     @Published public var isKeyboardVisible: Bool = false
     private var isResponseEnabled: Bool = true
     private var cancellables = Set<AnyCancellable>()
-    
+
     public init() {
         NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)
             .compactMap { [weak self] notification -> CGFloat? in
@@ -18,20 +18,12 @@ public class KeyboardHandler: ObservableObject {
                     return nil
                 }
                 let safeAreaBottom: CGFloat
-                if #available(iOS 15.0, *) {
-                    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                       let window = windowScene.windows.first
-                    {
-                        safeAreaBottom = window.safeAreaInsets.bottom
-                    } else {
-                        safeAreaBottom = 0
-                    }
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let window = windowScene.windows.first
+                {
+                    safeAreaBottom = window.safeAreaInsets.bottom
                 } else {
-                    if let window = UIApplication.shared.windows.first {
-                        safeAreaBottom = window.safeAreaInsets.bottom
-                    } else {
-                        safeAreaBottom = 0
-                    }
+                    safeAreaBottom = 0
                 }
                 return keyboardFrame.height - safeAreaBottom
             }

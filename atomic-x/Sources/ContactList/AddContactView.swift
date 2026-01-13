@@ -15,7 +15,6 @@ public struct AddContactPopView: View {
     public var body: some View {
         PopMenu(menuItems: [
             PopMenuInfo(
-                icon: "person.badge.plus",
                 title: LocalizedChatString("ContactsAddFriends"),
                 onClick: {
                     onDismiss()
@@ -25,7 +24,6 @@ public struct AddContactPopView: View {
                 }
             ),
             PopMenuInfo(
-                icon: "person.3.fill",
                 title: LocalizedChatString("ContactsJoinGroup"),
                 onClick: {
                     onDismiss()
@@ -102,10 +100,14 @@ public struct AddFriendView: View {
                 trailing: Button(LocalizedChatString("Cancel")) {
                     presentationMode.wrappedValue.dismiss()
                 }
+                .foregroundColor(themeState.colors.textColorLink)
             )
-        }
-        .background(themeState.colors.bgColorOperate)
-        .sheet(isPresented: $showFriendDetail) {
+    }
+    .background(
+        themeState.colors.bgColorOperate
+            .ignoresSafeArea()
+    )
+    .sheet(isPresented: $showFriendDetail) {
             if let userInfo = addFriendInfo {
                 AddFriendDetailView(
                     userInfo: userInfo,
@@ -243,8 +245,13 @@ public struct JoinGroupView: View {
                 trailing: Button(LocalizedChatString("Cancel")) {
                     presentationMode.wrappedValue.dismiss()
                 }
+                .foregroundColor(themeState.colors.textColorLink)
             )
         }
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
         .sheet(isPresented: $showGroupDetail) {
             if let groupInfo = joinGroupInfo {
                 JoinGroupDetailView(
@@ -310,7 +317,7 @@ struct JoinGroupResultCell: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
-            .background(themeState.colors.bgColorOperate)
+            .background(themeState.colors.bgColorTopBar)
             .cornerRadius(8)
             .shadow(color: themeState.colors.bgColorElementMask, radius: 2, x: 0, y: 1)
         }
@@ -402,7 +409,10 @@ struct AddFriendDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 30)
             }
-            .background(themeState.colors.bgColorOperate)
+            .background(
+                themeState.colors.bgColorOperate
+                    .ignoresSafeArea()
+            )
             .navigationTitle("")
             .navigationBarItems(
                 leading: Button(LocalizedChatString("Cancel")) {
@@ -520,7 +530,10 @@ public struct JoinGroupDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 30)
             }
-            .background(themeState.colors.bgColorOperate)
+            .background(
+                themeState.colors.bgColorOperate
+                    .ignoresSafeArea()
+            )
             .navigationTitle("")
             .navigationBarItems(
                 leading: Button(LocalizedChatString("Cancel")) {
@@ -533,7 +546,7 @@ public struct JoinGroupDetailView: View {
 
     private func joinGroup() {
         isJoiningGroup = true
-        
+
         if groupInfo.isInGroup {
             isJoiningGroup = false
             WindowToastManager.shared.show(LocalizedChatString("AlreadyGroupMember"), type: .error, duration: 3)
@@ -553,7 +566,7 @@ public struct JoinGroupDetailView: View {
                 case .failure(let error):
                     isJoiningGroup = false
                     print("Join group failed: \(error.code) - \(error.message)")
-                    
+
                     if error.code == 10013 {
                         WindowToastManager.shared.show(LocalizedChatString("AlreadyGroupMember"), type: .error, duration: 3)
                     } else if error.code == 10010 {
@@ -565,7 +578,6 @@ public struct JoinGroupDetailView: View {
                     } else {
                         WindowToastManager.shared.show(LocalizedChatString("GroupJoinRequestFailed"), type: .error, duration: 3)
                     }
-                    
                 }
             }
         )

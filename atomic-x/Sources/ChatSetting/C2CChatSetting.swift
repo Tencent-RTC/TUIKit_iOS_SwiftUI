@@ -231,7 +231,7 @@ public struct C2CChatSetting: View {
                         }
                     )
                 }
-                .background(themeState.colors.bgColorOperate)
+                .background(themeState.colors.bgColorTopBar)
                 .cornerRadius(12)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 20)
@@ -264,7 +264,7 @@ public struct C2CChatSetting: View {
                         }
                     )
                 }
-                .background(themeState.colors.bgColorOperate)
+                .background(themeState.colors.bgColorTopBar)
                 .cornerRadius(12)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 20)
@@ -285,12 +285,16 @@ public struct C2CChatSetting: View {
                         }
                     )
                 }
-                .background(themeState.colors.bgColorOperate)
+                .background(themeState.colors.bgColorTopBar)
                 .cornerRadius(12)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 20)
             }
         }
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
     }
 
     // MARK: - Private Methods

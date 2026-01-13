@@ -461,7 +461,10 @@ public class WindowToastManager: ObservableObject {
         message: String,
         duration: TimeInterval = 2.0
     ) {
-        hide()
+        // Reset icon toast state without dismissing window
+        isVisible = false
+        hideTimer?.invalidate()
+        
         simpleMessage = message
         isSimpleVisible = true
         

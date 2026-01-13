@@ -10,7 +10,7 @@ public enum MessageAction: String, CaseIterable {
     case copy
     case recall
 //    case quote
-//    case forward
+    case forward
     case delete
 //    case reference
 }
@@ -39,7 +39,9 @@ public class AppBuilderConfig {
     public var themeMode: ThemeMode = .system
     public var primaryColor: String = "#1C66E5"
     public var messageAlignment: MessageAlignment = .twoSided
-//    public var enableReadReceipt: Bool = false
+    public var enableReadReceipt: Bool = false
+    public var translateTargetLanguage: String = ""
+
     public var messageActionList: [MessageAction] = [.copy, .recall, .delete]
     public var enableCreateConversation: Bool = true
     public var conversationActionList: [ConversationAction] = [.delete, .mute, .pin, .markUnread, .clearHistory]
@@ -78,9 +80,9 @@ public class AppBuilderHelper {
             {
                 config.messageAlignment = alignment
             }
-//            if let enableReadReceipt = messageList["enableReadReceipt"] as? Bool {
-//                config.enableReadReceipt = enableReadReceipt
-//            }
+            if let enableReadReceipt = messageList["enableReadReceipt"] as? Bool {
+                config.enableReadReceipt = enableReadReceipt
+            }
             if let actionList = messageList["messageActionList"] as? [String] {
                 config.messageActionList = actionList.compactMap { MessageAction(rawValue: $0) }
             }
@@ -115,10 +117,5 @@ public class AppBuilderHelper {
                 config.avatarShape = shape
             }
         }
-        printConfig()
-    }
-
-    private static func printConfig() {
-        let config = AppBuilderConfig.shared
     }
 }

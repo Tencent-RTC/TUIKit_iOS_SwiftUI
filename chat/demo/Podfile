@@ -1,4 +1,4 @@
-platform :ios, '14.0'
+platform :ios, '15.0'
 
 target 'ChatDemo' do
   use_frameworks! :linkage => :static
@@ -7,7 +7,7 @@ target 'ChatDemo' do
   pod 'ChatUIKit', :path => '../uikit/ChatUIKit.podspec'
   pod 'AtomicXCore', '3.5.0'
 
-end
+end 
 
 #Pods config
 post_install do |installer|
@@ -25,8 +25,9 @@ post_install do |installer|
             config.build_settings['CODE_SIGNING_REQUIRED'] = "NO"
             config.build_settings['CODE_SIGNING_ALLOWED'] = "NO"
             config.build_settings['ENABLE_BITCODE'] = "NO"
-            config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = "14.0"
+            config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = "15.0"
             
         end
     end
 end
+

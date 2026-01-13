@@ -38,7 +38,11 @@ struct ButtonConfig {
         self.actionHandler = actionHandler
     }
 
-    func createAction(for message: MessageInfo?, menuManager: MessageMenuManager, messageActionStore: MessageActionStore) -> () -> Void {
+    func createAction(
+        for message: MessageInfo?,
+        menuManager: MessageMenuManager,
+        messageActionStore: MessageActionStore
+    ) -> () -> Void {
         return { [actionHandler] in
             actionHandler(message, menuManager, messageActionStore)
         }
@@ -69,6 +73,7 @@ struct MessageMenuData {
     var messageBubbleFrame: CGRect = .zero
     var shouldShowAbove: Bool = true
     var customActions: [MessageCustomAction] = []
+    var messageListBounds: CGRect = .zero
 }
 
 enum MessageMenuConfig {
@@ -84,7 +89,7 @@ enum MessageMenuConfig {
     static let buttonWidth: CGFloat = 42
     static let buttonHeight: CGFloat = 30
     static let buttonSideInset: CGFloat = 10
-    static let buttonMinSpacing: CGFloat = 5
+    static let buttonMinSpacing: CGFloat = 8
     static let maxButtonsPerRow: Int = 5
     static let rowSpacing: CGFloat = 18
     static let minMenuWidth: CGFloat = 60
@@ -96,7 +101,7 @@ enum MessageMenuConfig {
     static let menuMinEdgeSpacing: CGFloat = 20
     static let arrowMinMargin: CGFloat = 30
 
-    static func calculateMenuDimensions(buttonCount: Int) -> (width: CGFloat, height: CGFloat) {
+    static func calculateMenuDimensions(buttonCount: Int, hasReactionPicker: Bool = false) -> (width: CGFloat, height: CGFloat) {
         let rows = calculateRowCount(buttonCount: buttonCount)
         let buttonsInFullRow = min(buttonCount, maxButtonsPerRow)
         let totalButtonWidth = CGFloat(buttonsInFullRow) * buttonWidth
@@ -106,7 +111,11 @@ enum MessageMenuConfig {
         let calculatedWidth = totalButtonWidth + totalSpacing + totalSideInsets + contentPadding
         let menuWidth = max(minMenuWidth, min(calculatedWidth, menuMaxWidth))
         let buttonAreaHeight = CGFloat(rows) * buttonHeight + CGFloat(max(0, rows - 1)) * rowSpacing
-        let contentHeight = buttonAreaHeight + menuContentTopPadding + menuContentBottomPadding
+
+        // Add reaction picker height if needed (emoji height 28 + vertical padding 6*2 + divider 0.5 + divider vertical padding 8*2)
+        let reactionPickerHeight: CGFloat = hasReactionPicker ? (28 + 12 + 0.5 + 16) : 0
+
+        let contentHeight = buttonAreaHeight + menuContentTopPadding + menuContentBottomPadding + reactionPickerHeight
         let totalHeight = contentHeight + arrowHeight + contentPadding
         return (menuWidth, totalHeight)
     }
@@ -121,54 +130,166 @@ enum MessageMenuConfig {
 }
 
 enum MenuButtonConfig {
-    static let allButtons: [ButtonConfig] = [
-        ButtonConfig(
-            iconName: "copy_icon_figma",
-            systemIconFallback: "doc.on.doc",
-            label: LocalizedChatString("Copy"),
-            shouldShow: { _ in true },
-            actionHandler: { message, menuManager, _ in
-                if let text = message?.messageBody?.text {
-                    UIPasteboard.general.string = text
-//                    Toast.simple(LocalizedChatString("copied"))
+    static func allButtons(asrDisplayManager: AsrDisplayManager, translationDisplayManager: TranslationDisplayManager) -> [ButtonConfig] {
+        return [
+            ButtonConfig(
+                iconName: "message_copy",
+                systemIconFallback: "doc.on.doc",
+                label: LocalizedChatString("Copy"),
+                shouldShow: { message in
+                    guard let message = message else { return false }
+                    // Violation messages cannot be copied
+                    return message.status != .violation
+                },
+                actionHandler: { message, menuManager, _ in
+                    if let text = message?.messageBody?.text {
+                        UIPasteboard.general.string = text
+                        WindowToastManager.shared.show(LocalizedChatString("copied"), type: .success, duration: 3)
+                    }
+                    menuManager.hideMenu()
                 }
-                menuManager.hideMenu()
-            }
-        ),
-        ButtonConfig(
-            iconName: "recall_icon_figma",
-            systemIconFallback: "arrow.uturn.backward",
-            label: LocalizedChatString("Revoke"),
-            shouldShow: { message in
-                guard let message = message else { return false }
-                guard message.isSelf else { return false }
-                guard let messageDate = message.timestamp else { return false }
-                let currentTime = Date()
-                let timeDifference = currentTime.timeIntervalSince(messageDate)
-                let twoMinutesInSeconds: TimeInterval = 2 * 60
-                return timeDifference < twoMinutesInSeconds
-            },
-            actionHandler: { message, menuManager, messageActionStore in
-                guard let message = message else { return }
-                menuManager.hideMenu()
-                messageActionStore.recallMessage(message, completion: { _ in })
-            }
-        ),
-        ButtonConfig(
-            iconName: "delete_icon_figma",
-            systemIconFallback: "trash",
-            label: LocalizedChatString("Delete"),
-            shouldShow: { _ in true },
-            actionHandler: { message, menuManager, messageActionStore in
-                guard let message = message else { return }
-                menuManager.hideMenu()
-                messageActionStore.deleteMessage(message, completion: { _ in })
-            }
-        )
-    ]
+            ),
+            ButtonConfig(
+                iconName: "message_recall",
+                systemIconFallback: "arrow.uturn.backward",
+                label: LocalizedChatString("Revoke"),
+                shouldShow: { message in
+                    guard let message = message else { return false }
+                    guard message.isSelf else { return false }
+                    // Violation messages cannot be revoked
+                    guard message.status != .violation else { return false }
+                    guard let messageDate = message.timestamp else { return false }
+                    let currentTime = Date()
+                    let timeDifference = currentTime.timeIntervalSince(messageDate)
+                    let twoMinutesInSeconds: TimeInterval = 2 * 60
+                    return timeDifference < twoMinutesInSeconds
+                },
+                actionHandler: { message, menuManager, messageActionStore in
+                    guard let message = message else { return }
+                    menuManager.hideMenu()
+                    messageActionStore.recallMessage(completion: { _ in })
+                }
+            ),
+            ButtonConfig(
+                iconName: "message_delete",
+                systemIconFallback: "trash",
+                label: LocalizedChatString("Delete"),
+                shouldShow: { _ in true },
+                actionHandler: { message, menuManager, messageActionStore in
+                    guard let message = message else { return }
+                    menuManager.hideMenu()
+                    messageActionStore.deleteMessage(completion: { _ in })
+                }
+            ),
+            ButtonConfig(
+                iconName: "message_info",
+                systemIconFallback: "info.circle",
+                label: LocalizedChatString("Info"),
+                shouldShow: { message in
+                    guard let message = message else { return false }
+                    return message.groupID != nil && message.needReadReceipt && message.isSelf
+                },
+                actionHandler: { message, menuManager, messageActionStore in
+                    guard let message = message else { return }
+                    menuManager.hideMenu()
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("kShowMessageReadReceiptNotification"),
+                        object: nil,
+                        userInfo: ["message": message, "messageActionStore": messageActionStore]
+                    )
+                }
+            ),
+            ButtonConfig(
+                iconName: "message_forward",
+                systemIconFallback: "arrowshape.turn.up.right",
+                label: LocalizedChatString("Forward"),
+                shouldShow: { message in
+                    guard let message = message else { return false }
+                    // Violation messages cannot be forwarded
+                    return message.status != .sendFail && message.status != .violation
+                },
+                actionHandler: { message, menuManager, _ in
+                    guard let message = message else { return }
+                    menuManager.hideMenu()
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("showForwardTargetSelector"),
+                        object: nil,
+                        userInfo: ["messages": [message]]
+                    )
+                }
+            ),
+            ButtonConfig(
+                iconName: "message_convert",
+                systemIconFallback: "text.bubble",
+                label: LocalizedChatString("ConvertToText"),
+                shouldShow: { message in
+                    guard let message = message else { return false }
+                    // Only show for sound messages that are sent successfully and ASR bubble is not showing
+                    // Violation messages cannot be converted to text
+                    guard message.messageType == .sound else { return false }
+                    guard message.status == .sendSuccess else { return false }
+                    // Show "ConvertToText" menu item if ASR bubble is not expanded
+                    return !asrDisplayManager.isExpanded(message.msgID)
+                },
+                actionHandler: { message, menuManager, _ in
+                    guard let message = message else { return }
+                    menuManager.hideMenu()
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("convertVoiceToText"),
+                        object: nil,
+                        userInfo: ["message": message]
+                    )
+                }
+            ),
+            ButtonConfig(
+                iconName: "message_translate",
+                systemIconFallback: "character.bubble",
+                label: LocalizedChatString("Translate"),
+                shouldShow: { message in
+                    guard let message = message else { return false }
+                    // Only show for text messages that are sent successfully and translation bubble is not showing
+                    // Violation messages cannot be translated
+                    guard message.messageType == .text else { return false }
+                    guard message.status == .sendSuccess else { return false }
+                    // Show "Translate" menu item if translation bubble is not expanded
+                    // (either no translation yet, or user collapsed it)
+                    return !translationDisplayManager.isExpanded(message.msgID)
+                },
+                actionHandler: { message, menuManager, _ in
+                    guard let message = message else { return }
+                    menuManager.hideMenu()
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("translateTextMessage"),
+                        object: nil,
+                        userInfo: ["message": message]
+                    )
+                }
+            ),
+            ButtonConfig(
+                iconName: "message_multiselect",
+                systemIconFallback: "checkmark.circle",
+                label: LocalizedChatString("MultiSelect"),
+                shouldShow: { _ in true },
+                actionHandler: { message, menuManager, _ in
+                    menuManager.hideMenu()
+                    NotificationCenter.default.post(
+                        name: NSNotification.Name("enterMultiSelectMode"),
+                        object: nil,
+                        userInfo: ["initialMessage": message as Any]
+                    )
+                }
+            ),
+        ]
+    }
 
-    static func getVisibleButtons(for message: MessageInfo?, style: MessageActionConfigProtocol?, customActions: [MessageCustomAction] = []) -> [ButtonConfig] {
-        var buttons = allButtons.filter { button in
+    static func getVisibleButtons(
+        for message: MessageInfo?,
+        style: MessageActionConfigProtocol?,
+        customActions: [MessageCustomAction] = [],
+        asrDisplayManager: AsrDisplayManager = AsrDisplayManager(),
+        translationDisplayManager: TranslationDisplayManager = TranslationDisplayManager()
+    ) -> [ButtonConfig] {
+        var buttons = allButtons(asrDisplayManager: asrDisplayManager, translationDisplayManager: translationDisplayManager).filter { button in
             guard button.shouldShow(message) else { return false }
             switch button.label {
             case LocalizedChatString("Copy"):
@@ -180,6 +301,12 @@ enum MenuButtonConfig {
             case LocalizedChatString("Revoke"):
                 guard let style = style else { return false }
                 return style.isSupportRecall
+            case LocalizedChatString("Forward"):
+                guard let style = style else { return false }
+                return style.isSupportForward
+            case LocalizedChatString("MultiSelect"):
+                guard let style = style else { return false }
+                return style.isSupportMultiSelect
             default:
                 return true
             }
@@ -206,20 +333,23 @@ enum MenuButtonConfig {
 
 class MessageMenuManager: ObservableObject {
     @Published var menuData = MessageMenuData()
-    static let shared = MessageMenuManager()
 
-    func showMenu(for message: MessageInfo, bubbleFrame: CGRect, customActions: [MessageCustomAction] = []) {
+    func showMenu(for message: MessageInfo, bubbleFrame: CGRect, messageListBounds: CGRect = .zero, customActions: [MessageCustomAction] = []) {
         let safeInsets = getSafeAreaInsets()
         let safeAreaTop = safeInsets.top
-        let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: ChatMessageListConfig(), customActions: customActions).count
-        let dynamicMenuHeight = MessageMenuConfig.calculateMenuDimensions(buttonCount: buttonCount).height
+        let config = ChatMessageListConfig()
+        let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: config, customActions: customActions).count
+        // Violation messages should not show reaction picker
+        let hasReactionPicker = ((config as? MessageListConfigProtocol)?.isSupportReaction ?? false) && message.status != .violation
+        let dynamicMenuHeight = MessageMenuConfig.calculateMenuDimensions(buttonCount: buttonCount, hasReactionPicker: hasReactionPicker).height
         let hasEnoughSpaceAbove = bubbleFrame.minY - safeAreaTop >= dynamicMenuHeight + 40
         menuData = MessageMenuData(
             isShowing: true,
             message: message,
             messageBubbleFrame: bubbleFrame,
             shouldShowAbove: hasEnoughSpaceAbove,
-            customActions: customActions
+            customActions: customActions,
+            messageListBounds: messageListBounds
         )
     }
 
@@ -229,12 +359,10 @@ class MessageMenuManager: ObservableObject {
 }
 
 func getSafeAreaInsets() -> UIEdgeInsets {
-    if #available(iOS 15.0, *) {
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let window = windowScene.windows.first
-        {
-            return window.safeAreaInsets
-        }
+    if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+       let window = windowScene.windows.first
+    {
+        return window.safeAreaInsets
     }
     if let window = UIApplication.shared.windows.first(where: { $0.isKeyWindow }) {
         return window.safeAreaInsets
@@ -245,29 +373,38 @@ func getSafeAreaInsets() -> UIEdgeInsets {
 struct MessageActionView: View {
     @EnvironmentObject var menuManager: MessageMenuManager
     @Environment(\.messageCustomActions) var customActions: [MessageCustomAction]
-    private var messageActionStore: MessageActionStore
+    @Environment(\.asrDisplayManager) var asrDisplayManager: AsrDisplayManager
+    @Environment(\.translationDisplayManager) var translationDisplayManager: TranslationDisplayManager
     private var config: MessageActionConfigProtocol
 
     public init(config: MessageActionConfigProtocol) {
-        self.messageActionStore = MessageActionStore.create()
         self.config = config
     }
 
     public var body: some View {
         if let message = menuManager.menuData.message,
            menuManager.menuData.isShowing,
-           MenuButtonConfig.getVisibleButtons(for: message, style: config, customActions: menuManager.menuData.customActions).count > 0
+           MenuButtonConfig.getVisibleButtons(for: message, style: config, customActions: menuManager.menuData.customActions, asrDisplayManager: asrDisplayManager, translationDisplayManager: translationDisplayManager).count > 0
         {
+            let messageActionStore = MessageActionStore.create(message: message)
             ZStack {
-                menuContent(message: message)
+                menuContent(message: message, messageActionStore: messageActionStore)
                     .transition(.scale(scale: 0.95).combined(with: .opacity))
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.75), value: menuManager.menuData.isShowing)
         }
     }
 
-    private func menuContent(message: MessageInfo) -> some View {
-        MenuPositionWrapper(message: message, menuManager: menuManager, messageActionStore: messageActionStore, style: config, customActions: menuManager.menuData.customActions)
+    private func menuContent(message: MessageInfo, messageActionStore: MessageActionStore) -> some View {
+        MenuPositionWrapper(
+            message: message,
+            menuManager: menuManager,
+            messageActionStore: messageActionStore,
+            style: config,
+            customActions: menuManager.menuData.customActions,
+            asrDisplayManager: asrDisplayManager,
+            translationDisplayManager: translationDisplayManager
+        )
     }
 
     public struct MenuPositionWrapper: View {
@@ -276,13 +413,25 @@ struct MessageActionView: View {
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
         let customActions: [MessageCustomAction]
+        let asrDisplayManager: AsrDisplayManager
+        let translationDisplayManager: TranslationDisplayManager
 
-        public init(message: MessageInfo, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol, customActions: [MessageCustomAction] = []) {
+        public init(
+            message: MessageInfo,
+            menuManager: MessageMenuManager,
+            messageActionStore: MessageActionStore,
+            style: MessageActionConfigProtocol,
+            customActions: [MessageCustomAction] = [],
+            asrDisplayManager: AsrDisplayManager = AsrDisplayManager(),
+            translationDisplayManager: TranslationDisplayManager = TranslationDisplayManager()
+        ) {
             self.message = message
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
             self.customActions = customActions
+            self.asrDisplayManager = asrDisplayManager
+            self.translationDisplayManager = translationDisplayManager
         }
 
         public var body: some View {
@@ -291,7 +440,9 @@ struct MessageActionView: View {
                 menuManager: menuManager,
                 messageActionStore: messageActionStore,
                 style: style,
-                customActions: customActions
+                customActions: customActions,
+                asrDisplayManager: asrDisplayManager,
+                translationDisplayManager: translationDisplayManager
             )
         }
     }
@@ -302,16 +453,28 @@ struct MessageActionView: View {
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
         let customActions: [MessageCustomAction]
+        let asrDisplayManager: AsrDisplayManager
+        let translationDisplayManager: TranslationDisplayManager
         public var menuHeight: CGFloat { MessageMenuConfig.menuHeight }
         public var horizontalPadding: CGFloat { MessageMenuConfig.menuHorizontalPadding }
         public var safeSpacing: CGFloat { MessageMenuConfig.menuSafeSpacing }
 
-        public init(message: MessageInfo, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol, customActions: [MessageCustomAction] = []) {
+        public init(
+            message: MessageInfo,
+            menuManager: MessageMenuManager,
+            messageActionStore: MessageActionStore,
+            style: MessageActionConfigProtocol,
+            customActions: [MessageCustomAction] = [],
+            asrDisplayManager: AsrDisplayManager = AsrDisplayManager(),
+            translationDisplayManager: TranslationDisplayManager = TranslationDisplayManager()
+        ) {
             self.message = message
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
             self.customActions = customActions
+            self.asrDisplayManager = asrDisplayManager
+            self.translationDisplayManager = translationDisplayManager
         }
 
         public var body: some View {
@@ -327,15 +490,19 @@ struct MessageActionView: View {
                     menuManager: menuManager,
                     messageActionStore: messageActionStore,
                     style: style,
-                    customActions: customActions
+                    customActions: customActions,
+                    asrDisplayManager: asrDisplayManager,
+                    translationDisplayManager: translationDisplayManager
                 )
             }
             .edgesIgnoringSafeArea(.all)
         }
 
         public func calculateMenuPosition(screenGeometry: GeometryProxy) -> MenuPositionParams {
-            let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: style, customActions: customActions).count
-            let dimensions = MessageMenuConfig.calculateMenuDimensions(buttonCount: buttonCount)
+            let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: style, customActions: customActions, asrDisplayManager: asrDisplayManager, translationDisplayManager: translationDisplayManager).count
+            // Violation messages should not show reaction picker
+            let hasReactionPicker = ((style as? MessageListConfigProtocol)?.isSupportReaction ?? false) && message.status != .violation
+            let dimensions = MessageMenuConfig.calculateMenuDimensions(buttonCount: buttonCount, hasReactionPicker: hasReactionPicker)
             let menuWidth = dimensions.width
             let dynamicMenuHeight = dimensions.height
             let screenHeight = UIScreen.main.bounds.height
@@ -344,9 +511,10 @@ struct MessageActionView: View {
             let safeAreaTop = safeInsets.top
             let safeAreaBottom = safeInsets.bottom
             let globalBubbleFrame = menuManager.menuData.messageBubbleFrame
+            let screenGeometryGlobal = screenGeometry.frame(in: .global)
             let localBubbleFrame = CGRect(
-                x: globalBubbleFrame.minX - screenGeometry.frame(in: .global).minX,
-                y: globalBubbleFrame.minY - screenGeometry.frame(in: .global).minY,
+                x: globalBubbleFrame.minX - screenGeometryGlobal.minX,
+                y: globalBubbleFrame.minY - screenGeometryGlobal.minY,
                 width: globalBubbleFrame.width,
                 height: globalBubbleFrame.height
             )
@@ -456,6 +624,8 @@ struct MessageActionView: View {
                     }
                 }
             }
+            // Ensure menuY is within valid range
+            menuY = max(minPosition, min(maxPosition, menuY))
             return (menuY, true)
         }
 
@@ -468,20 +638,44 @@ struct MessageActionView: View {
             safeAreaBottom: CGFloat,
             menuHeight: CGFloat
         ) -> (position: CGFloat, showAbove: Bool) {
-            var menuY = min(
-                maxPosition,
-                bubbleFrame.maxY + menuHeight/2 + MessageMenuConfig.menuBubbleSpacing
-            )
-            if menuY + menuHeight/2 > screenHeight - safeAreaBottom - MessageMenuConfig.menuMinEdgeSpacing {
-                let aboveY = max(
-                    minPosition,
-                    bubbleFrame.minY - MessageMenuConfig.menuBubbleSpacing - menuHeight/2
-                )
-                if aboveY - menuHeight/2 > safeAreaTop + MessageMenuConfig.menuMinEdgeSpacing {
-                    return (aboveY, true)
+            let messageListBounds = menuManager.menuData.messageListBounds
+
+            // Calculate menu position: center Y below the bubble
+            var menuY = bubbleFrame.maxY + menuHeight/2 + MessageMenuConfig.menuBubbleSpacing
+
+            // Use messageList bounds if available, otherwise fall back to screen-based limits
+            if messageListBounds != .zero {
+                let listHeight = messageListBounds.height
+                let topPadding: CGFloat = 10
+                let bottomPadding: CGFloat = 10
+
+                // Ensure menu top doesn't go above messageList top
+                let menuTop = menuY - menuHeight/2
+                if menuTop < topPadding {
+                    menuY = topPadding + menuHeight/2
                 }
-                menuY = screenHeight - safeAreaBottom - menuHeight/2 - MessageMenuConfig.menuMinEdgeSpacing
+
+                // Ensure menu bottom doesn't go below messageList bottom
+                let menuBottom = menuY + menuHeight/2
+                if menuBottom > listHeight - bottomPadding {
+                    let overflow = menuBottom - (listHeight - bottomPadding)
+                    menuY = menuY - overflow
+                }
+            } else {
+                // Fall back to original logic using screen-based limits
+                if menuY + menuHeight/2 > screenHeight - safeAreaBottom - MessageMenuConfig.menuMinEdgeSpacing {
+                    let aboveY = max(
+                        minPosition,
+                        bubbleFrame.minY - MessageMenuConfig.menuBubbleSpacing - menuHeight/2
+                    )
+                    if aboveY - menuHeight/2 > safeAreaTop + MessageMenuConfig.menuMinEdgeSpacing {
+                        return (aboveY, true)
+                    }
+                    menuY = screenHeight - safeAreaBottom - menuHeight/2 - MessageMenuConfig.menuMinEdgeSpacing
+                }
+                menuY = max(minPosition, min(maxPosition, menuY))
             }
+
             return (menuY, false)
         }
     }
@@ -497,6 +691,8 @@ struct MessageActionView: View {
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
         let customActions: [MessageCustomAction]
+        let asrDisplayManager: AsrDisplayManager
+        let translationDisplayManager: TranslationDisplayManager
 
         public init(
             x: CGFloat,
@@ -508,7 +704,9 @@ struct MessageActionView: View {
             menuManager: MessageMenuManager,
             messageActionStore: MessageActionStore,
             style: MessageActionConfigProtocol,
-            customActions: [MessageCustomAction] = []
+            customActions: [MessageCustomAction] = [],
+            asrDisplayManager: AsrDisplayManager = AsrDisplayManager(),
+            translationDisplayManager: TranslationDisplayManager = TranslationDisplayManager()
         ) {
             self.x = x
             self.y = y
@@ -520,6 +718,8 @@ struct MessageActionView: View {
             self.messageActionStore = messageActionStore
             self.style = style
             self.customActions = customActions
+            self.asrDisplayManager = asrDisplayManager
+            self.translationDisplayManager = translationDisplayManager
         }
 
         public var body: some View {
@@ -536,7 +736,9 @@ struct MessageActionView: View {
                     menuManager: menuManager,
                     messageActionStore: messageActionStore,
                     style: style,
-                    customActions: customActions
+                    customActions: customActions,
+                    asrDisplayManager: asrDisplayManager,
+                    translationDisplayManager: translationDisplayManager
                 )
             }
             .frame(width: width, height: height)
@@ -545,6 +747,7 @@ struct MessageActionView: View {
     }
 
     public struct UnifiedMenuShape: View {
+        @EnvironmentObject var themeState: ThemeState
         let width: CGFloat
         let height: CGFloat
         let arrowX: CGFloat
@@ -563,8 +766,8 @@ struct MessageActionView: View {
                 arrowX: arrowX,
                 showAbove: showAbove
             )
-            .fill(Color.white)
-            .shadow(color: Color.black.opacity(0.15), radius: 8, x: 0, y: 2)
+            .fill(themeState.colors.floatingColorDefault)
+            .shadow(color: themeState.colors.shadowColor, radius: 8, x: 0, y: 2)
             .zIndex(30)
         }
     }
@@ -649,6 +852,7 @@ struct MessageActionView: View {
     }
 
     public struct MenuBackgroundView: View {
+        @EnvironmentObject var themeState: ThemeState
         let width: CGFloat
         let height: CGFloat
         public init(width: CGFloat, height: CGFloat) {
@@ -658,14 +862,14 @@ struct MessageActionView: View {
 
         public var body: some View {
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white)
+                .fill(themeState.colors.floatingColorDefault)
                 .frame(width: width + 4, height: height + 4)
-                .shadow(color: Color.black.opacity(0.6), radius: 15, x: 0, y: 5)
+                .shadow(color: themeState.colors.shadowColor, radius: 15, x: 0, y: 5)
                 .zIndex(10)
             RoundedRectangle(cornerRadius: 14)
-                .fill(Color.white)
+                .fill(themeState.colors.floatingColorDefault)
                 .frame(width: width, height: height)
-                .shadow(color: Color.black.opacity(0.4), radius: 12, x: 0, y: 4)
+                .shadow(color: themeState.colors.shadowColor, radius: 12, x: 0, y: 4)
                 .zIndex(20)
         }
     }
@@ -703,20 +907,36 @@ struct MessageActionView: View {
 //        }
 //    }
     public struct MenuContentView: View {
+        @EnvironmentObject var themeState: ThemeState
         @ObservedObject var menuManager: MessageMenuManager
         let width: CGFloat
         let showAbove: Bool
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
         let customActions: [MessageCustomAction]
+        let asrDisplayManager: AsrDisplayManager
+        let translationDisplayManager: TranslationDisplayManager
 
-        public init(width: CGFloat, showAbove: Bool, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol, customActions: [MessageCustomAction] = []) {
+        @State private var showFullEmojiPicker = false
+
+        public init(
+            width: CGFloat,
+            showAbove: Bool,
+            menuManager: MessageMenuManager,
+            messageActionStore: MessageActionStore,
+            style: MessageActionConfigProtocol,
+            customActions: [MessageCustomAction] = [],
+            asrDisplayManager: AsrDisplayManager = AsrDisplayManager(),
+            translationDisplayManager: TranslationDisplayManager = TranslationDisplayManager()
+        ) {
             self.width = width
             self.showAbove = showAbove
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
             self.customActions = customActions
+            self.asrDisplayManager = asrDisplayManager
+            self.translationDisplayManager = translationDisplayManager
         }
 
         public var body: some View {
@@ -724,25 +944,121 @@ struct MessageActionView: View {
                 if !showAbove {
                     Spacer().frame(height: MessageMenuConfig.arrowHeight)
                 }
+
+                // Reaction Emoji Picker (if reaction is supported and message is not violation)
+                if let config = style as? MessageListConfigProtocol,
+                   config.isSupportReaction,
+                   menuManager.menuData.message?.status != .violation
+                {
+                    ReactionEmojiPicker(
+                        onEmojiClick: { emoji in
+                            guard let message = menuManager.menuData.message,
+                                  let emojiName = emoji.name else { return }
+
+                            // Check if already reacted
+                            let hasReacted = message.reactionList.contains { reaction in
+                                reaction.reactionID == emojiName && reaction.reactedByMyself
+                            }
+
+                            if hasReacted {
+                                // Remove reaction
+                                messageActionStore.removeMessageReaction(
+                                    reactionID: emojiName,
+                                    completion: nil
+                                )
+                            } else {
+                                // Add reaction
+                                messageActionStore.addMessageReaction(
+                                    reactionID: emojiName,
+                                    completion: { _ in
+                                        // Notify MessageList to scroll if this is the last message
+                                        NotificationCenter.default.post(
+                                            name: NSNotification.Name("reactionAdded"),
+                                            object: nil,
+                                            userInfo: ["msgID": message.msgID ?? ""]
+                                        )
+                                    }
+                                )
+                                // Add to recent emojis
+                                EmojiManager.shared.addRecentEmoji(emoji)
+                            }
+
+                            menuManager.hideMenu()
+                        },
+                        onExpandClick: {
+                            showFullEmojiPicker = true
+                        }
+                    )
+                    .environmentObject(themeState)
+                    .padding(.top, MessageMenuConfig.menuContentTopPadding)
+                    .padding(.horizontal, MessageMenuConfig.menuContentSidePadding)
+
+                    // Divider
+                    Rectangle()
+                        .fill(themeState.colors.strokeColorPrimary.opacity(0.3))
+                        .frame(height: 0.5)
+                        .padding(.vertical, 8)
+                }
+
                 FlexibleButtonGridView(
                     width: width,
                     menuManager: menuManager,
                     messageActionStore: messageActionStore,
                     style: style,
-                    customActions: customActions
+                    customActions: customActions,
+                    asrDisplayManager: asrDisplayManager,
+                    translationDisplayManager: translationDisplayManager
                 )
                 .padding(.top, MessageMenuConfig.menuContentTopPadding)
                 .padding(.bottom, MessageMenuConfig.menuContentBottomPadding)
                 if showAbove {
                     Spacer().frame(height: MessageMenuConfig.arrowHeight)
                 }
-                // Rectangle()
-                //     .fill(Color(hex: 0xE5E5E5))
-                //     .frame(height: 1)
-                //     .padding(.horizontal, 0)
             }
             .padding(MessageMenuConfig.menuContentSidePadding)
             .zIndex(35)
+            .sheet(isPresented: $showFullEmojiPicker) {
+                if let message = menuManager.menuData.message {
+                    ReactionEmojiPickerSheet(
+                        onEmojiClick: { emoji in
+                            guard let emojiName = emoji.name else { return }
+
+                            // Check if already reacted
+                            let hasReacted = message.reactionList.contains { reaction in
+                                reaction.reactionID == emojiName && reaction.reactedByMyself
+                            }
+
+                            if hasReacted {
+                                // Remove reaction
+                                messageActionStore.removeMessageReaction(
+                                    reactionID: emojiName,
+                                    completion: nil
+                                )
+                            } else {
+                                // Add reaction
+                                messageActionStore.addMessageReaction(
+                                    reactionID: emojiName,
+                                    completion: { _ in
+                                        // Notify MessageList to scroll if this is the last message
+                                        NotificationCenter.default.post(
+                                            name: NSNotification.Name("reactionAdded"),
+                                            object: nil,
+                                            userInfo: ["msgID": message.msgID ?? ""]
+                                        )
+                                    }
+                                )
+                                // Add to recent emojis
+                                EmojiManager.shared.addRecentEmoji(emoji)
+                            }
+
+                            showFullEmojiPicker = false
+                            menuManager.hideMenu()
+                        }
+                    )
+                    .environmentObject(themeState)
+                    .bottomSheet()
+                }
+            }
         }
     }
 
@@ -752,17 +1068,29 @@ struct MessageActionView: View {
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
         let customActions: [MessageCustomAction]
+        let asrDisplayManager: AsrDisplayManager
+        let translationDisplayManager: TranslationDisplayManager
 
-        public init(width: CGFloat, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol, customActions: [MessageCustomAction] = []) {
+        public init(
+            width: CGFloat,
+            menuManager: MessageMenuManager,
+            messageActionStore: MessageActionStore,
+            style: MessageActionConfigProtocol,
+            customActions: [MessageCustomAction] = [],
+            asrDisplayManager: AsrDisplayManager = AsrDisplayManager(),
+            translationDisplayManager: TranslationDisplayManager = TranslationDisplayManager()
+        ) {
             self.width = width
             self.menuManager = menuManager
             self.messageActionStore = messageActionStore
             self.style = style
             self.customActions = customActions
+            self.asrDisplayManager = asrDisplayManager
+            self.translationDisplayManager = translationDisplayManager
         }
 
         private var buttonData: [ButtonConfig] {
-            return MenuButtonConfig.getVisibleButtons(for: menuManager.menuData.message, style: style, customActions: customActions)
+            return MenuButtonConfig.getVisibleButtons(for: menuManager.menuData.message, style: style, customActions: customActions, asrDisplayManager: asrDisplayManager, translationDisplayManager: translationDisplayManager)
         }
 
         public var body: some View {
@@ -798,7 +1126,13 @@ struct MessageActionView: View {
         var messageActionStore: MessageActionStore
         let style: MessageActionConfigProtocol
 
-        public init(buttons: [ButtonConfig], width: CGFloat, menuManager: MessageMenuManager, messageActionStore: MessageActionStore, style: MessageActionConfigProtocol) {
+        public init(
+            buttons: [ButtonConfig],
+            width: CGFloat,
+            menuManager: MessageMenuManager,
+            messageActionStore: MessageActionStore,
+            style: MessageActionConfigProtocol
+        ) {
             self.buttons = buttons
             self.width = width
             self.menuManager = menuManager
@@ -820,17 +1154,22 @@ struct MessageActionView: View {
                             label: buttons[index].label,
                             width: buttonWidth,
                             height: MessageMenuConfig.buttonHeight,
-                            action: buttons[index].createAction(for: menuManager.menuData.message, menuManager: menuManager, messageActionStore: messageActionStore)
+                            action: buttons[index].createAction(
+                                for: menuManager.menuData.message,
+                                menuManager: menuManager,
+                                messageActionStore: messageActionStore
+                            )
                         )
                     }
                 }
-                Spacer()
+                Spacer(minLength: 0)
             }
-            .frame(width: width)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     public struct MenuActionButton: View {
+        @EnvironmentObject var themeState: ThemeState
         let iconName: String
         let systemIconFallback: String
         let label: String
@@ -851,21 +1190,22 @@ struct MessageActionView: View {
             Button(action: action) {
                 VStack(spacing: MessageMenuConfig.iconLabelSpacing) {
                     ZStack {
-                        if UIImage(named: iconName) != nil {
-                            Image(iconName)
+                        if UIImage(named: iconName, in: AtomicXChatResources.resourceBundle, compatibleWith: nil) != nil {
+                            Image(iconName, bundle: AtomicXChatResources.resourceBundle)
                                 .resizable()
+                                .renderingMode(.template)
                                 .scaledToFit()
                                 .frame(width: MessageMenuConfig.iconSize, height: MessageMenuConfig.iconSize)
-                                .foregroundColor(.gray)
+                                .foregroundColor(themeState.colors.textColorLink)
                         } else {
                             Image(systemName: systemIconFallback)
                                 .font(.system(size: MessageMenuConfig.iconSize - 2))
-                                .foregroundColor(.gray)
+                                .foregroundColor(themeState.colors.textColorLink)
                         }
                     }
                     Text(label)
                         .font(.system(size: MessageMenuConfig.labelFontSize))
-                        .foregroundColor(.gray)
+                        .foregroundColor(themeState.colors.textColorSecondary)
                 }
             }
             .frame(width: width, height: height)

@@ -47,6 +47,40 @@ public class VideoPlayer: ObservableObject {
         print("VideoPlayer: isPresented set to true")
     }
     
+    /// Play video using UIKit presentation (for use in sheets/modals)
+    public func playWithUIKit(videoData: VideoData) {
+        print("VideoPlayer: Starting to play video with UIKit, URI: \(videoData.uri)")
+        currentVideoData = videoData
+        
+        let videoURL: URL
+        if let localPath = videoData.localPath, !localPath.isEmpty {
+            videoURL = URL(fileURLWithPath: localPath)
+        } else {
+            videoURL = URL(string: videoData.uri) ?? URL(fileURLWithPath: videoData.uri)
+        }
+        
+        let player = AVPlayer(url: videoURL)
+        let playerVC = AVPlayerViewController()
+        playerVC.player = player
+        
+        // Wrap AVPlayerViewController in a container to control transition
+        let containerVC = VideoPlayerContainerViewController(playerViewController: playerVC)
+        containerVC.modalPresentationStyle = .fullScreen
+        containerVC.modalTransitionStyle = .crossDissolve
+        
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.windows.first?.rootViewController {
+            // Find the topmost presented view controller
+            var topVC = rootVC
+            while let presented = topVC.presentedViewController {
+                topVC = presented
+            }
+            topVC.present(containerVC, animated: true) {
+                player.play()
+            }
+        }
+    }
+    
     public func dismiss() {
         print("VideoPlayer: Dismissing video player")
         player?.pause()
@@ -157,6 +191,10 @@ public struct VideoPlayerView: View {
             }
         )
         .ignoresSafeArea(.all)
+        .onDisappear {
+            // Ensure player is stopped when view disappears
+            videoPlayer.dismiss()
+        }
     }
 }
 
@@ -187,5 +225,35 @@ public struct VideoPlayerSupportModifier: ViewModifier {
 public extension View {
     func videoPlayerSupport() -> some View {
         modifier(VideoPlayerSupportModifier())
+    }
+}
+
+// MARK: - Video Player Container for UIKit presentation
+
+class VideoPlayerContainerViewController: UIViewController {
+    private let playerViewController: AVPlayerViewController
+    
+    init(playerViewController: AVPlayerViewController) {
+        self.playerViewController = playerViewController
+        super.init(nibName: nil, bundle: nil)
+    }
+    
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+    
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = .black
+        
+        addChild(playerViewController)
+        view.addSubview(playerViewController.view)
+        playerViewController.view.frame = view.bounds
+        playerViewController.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        playerViewController.didMove(toParent: self)
+    }
+    
+    override var prefersStatusBarHidden: Bool {
+        return true
     }
 }

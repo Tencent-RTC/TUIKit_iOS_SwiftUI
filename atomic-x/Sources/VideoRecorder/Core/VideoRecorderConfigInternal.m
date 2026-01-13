@@ -5,7 +5,7 @@
 #import "VideoRecorderConfigInternal.h"
 #import "VideoRecorderCommon.h"
 
-#define DEFAULT_CONFIG_FILE @"default_config"
+#define DEFAULT_CONFIG_FILE @"video_recorder_config"
 
 @interface VideoRecorderConfigInternal() {
     NSDictionary * _jsonDicFromConfigFile;

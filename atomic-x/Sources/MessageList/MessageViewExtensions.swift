@@ -36,11 +36,29 @@ private struct TargetMessageIDKey: EnvironmentKey {
     static let defaultValue: String? = nil
 }
 
+private struct IsInMergedDetailViewKey: EnvironmentKey {
+    static let defaultValue: Bool = false
+}
+
 extension EnvironmentValues {
     var locateMessageID: String? {
         get { self[TargetMessageIDKey.self] }
         set { self[TargetMessageIDKey.self] = newValue }
     }
+    
+    var isInMergedDetailView: Bool {
+        get { self[IsInMergedDetailViewKey.self] }
+        set { self[IsInMergedDetailViewKey.self] = newValue }
+    }
+    
+    var messageListBounds: CGRect {
+        get { self[MessageListBoundsKey.self] }
+        set { self[MessageListBoundsKey.self] = newValue }
+    }
+}
+
+private struct MessageListBoundsKey: EnvironmentKey {
+    static let defaultValue: CGRect = .zero
 }
 
 extension CGFloat {
@@ -75,6 +93,7 @@ struct MessageViewModifiers: ViewModifier {
     @Binding var messageBubbleFrame: CGRect
     @Binding var longPressed: Bool
     @Environment(\.messageCustomActions) var customActions: [MessageCustomAction]
+    @Environment(\.messageListBounds) var messageListBounds: CGRect
     let menuManager: MessageMenuManager
     let message: MessageInfo
     let style: MessageListConfigProtocol
@@ -91,7 +110,7 @@ struct MessageViewModifiers: ViewModifier {
                 longPressed = true
                 let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
                 impactFeedback.impactOccurred()
-                menuManager.showMenu(for: message, bubbleFrame: messageBubbleFrame, customActions: customActions)
+                menuManager.showMenu(for: message, bubbleFrame: messageBubbleFrame, messageListBounds: messageListBounds, customActions: customActions)
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     longPressed = false
                 }
@@ -101,11 +120,14 @@ struct MessageViewModifiers: ViewModifier {
 
 struct BubbleBackground: ViewModifier {
     @EnvironmentObject var themeState: ThemeState
+    @Environment(\.isInMergedDetailView) private var isInMergedDetailView
     @State private var isHighlighted: Bool = false
     @State private var highlightTimer: Timer?
+    @State private var hasAnimated: Bool = false
     let isSelf: Bool
     let isLeft: Bool
     let shouldHighlight: Bool
+    let message: MessageInfo
 
     func body(content: Content) -> some View {
         content.background(
@@ -119,8 +141,12 @@ struct BubbleBackground: ViewModifier {
                 .animation(.easeInOut(duration: 0.3), value: isHighlighted)
             }
         )
+        .overlay(
+            readReceiptIcon,
+            alignment: .bottomTrailing
+        )
         .onAppear {
-            if shouldHighlight {
+            if shouldHighlight && !hasAnimated {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     startBlinkingAnimation()
                 }
@@ -128,7 +154,21 @@ struct BubbleBackground: ViewModifier {
         }
     }
 
+    @ViewBuilder
+    private var readReceiptIcon: some View {
+        if MessageListHelper.shouldShowReadReceipt(message: message, isInMergedDetailView: isInMergedDetailView) {
+            let iconName = MessageListHelper.getReceiptIconName(message: message)
+
+            Image(iconName, bundle: AtomicXChatResources.resourceBundle)
+                .resizable()
+                .frame(width: 14, height: 14)
+                .padding(.trailing, 8)
+                .padding(.bottom, message.messageType == .sound ? 2 : 6)
+        }
+    }
+
     private func startBlinkingAnimation() {
+        hasAnimated = true
         highlightTimer?.invalidate()
         var blinkCount = 0
         let maxBlinks = 6
@@ -149,7 +189,12 @@ struct BubbleBackground: ViewModifier {
 }
 
 extension View {
-    func bubbleBackground(isSelf: Bool, isLeft: Bool, shouldHighlight: Bool = false) -> some View {
-        modifier(BubbleBackground(isSelf: isSelf, isLeft: isLeft, shouldHighlight: shouldHighlight))
+    func bubbleBackground(isSelf: Bool, isLeft: Bool, shouldHighlight: Bool = false, message: MessageInfo) -> some View {
+        modifier(BubbleBackground(isSelf: isSelf, isLeft: isLeft, shouldHighlight: shouldHighlight, message: message))
+    }
+
+    /// Flip the view vertically for inverted list (chat list pattern)
+    func flippedForInvertedList() -> some View {
+        self.scaleEffect(x: 1, y: -1, anchor: .center)
     }
 }

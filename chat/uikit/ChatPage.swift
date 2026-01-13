@@ -34,6 +34,7 @@ extension MessageInfo {
 public struct ChatPage: View {
     @EnvironmentObject var themeState: ThemeState
     @StateObject private var toast = Toast()
+    @State private var multiSelectBottomBar: AnyView? = nil
     let onBack: (() -> Void)?
     let onUserAvatarClick: ((String) -> Void)?
     let onNavigationAvatarClick: (() -> Void)?
@@ -61,18 +62,32 @@ public struct ChatPage: View {
             Divider()
                 .background(self.themeState.colors.strokeColorPrimary)
 
-            VStack(spacing: 0) {
-                MessageList(
-                    conversationID: self.conversation.id,
-                    locateMessage: self.locateMessage,
-                    onUserClick: { userID in
-                        onUserAvatarClick?(userID)
+            ZStack(alignment: .bottom) {
+                VStack(spacing: 0) {
+                    MessageList(
+                        conversationID: self.conversation.id,
+                        locateMessage: self.locateMessage,
+                        onUserClick: { userID in
+                            onUserAvatarClick?(userID)
+                        },
+                        onMultiSelectModeChange: { isMultiSelect, bottomBar in
+                            self.multiSelectBottomBar = bottomBar
+                        }
+                    )
+
+                    if let bottomBar = multiSelectBottomBar {
+                        bottomBar
+                    } else {
+                        self.messageInputAreaView
                     }
-                )
-                self.messageInputAreaView
+                }
+                .ignoresSafeArea(.keyboard)
             }
-            .ignoresSafeArea(.keyboard)
         }
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
         .toast(toast)
     }
 

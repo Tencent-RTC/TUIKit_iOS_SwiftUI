@@ -9,7 +9,9 @@ import UIKit
 #if canImport(UIKit)
 struct VideoRecorderViewWrapper: UIViewControllerRepresentable {
     let config: VideoRecorderConfig?
-    let onMediaCaptured: (String?, MediaType) -> Void
+    let onVideoCaptured: (String?, Int, String?) -> Void
+    let onPhotoCaptured: (String?) -> Void
+    var primaryColor: String?
 
     func makeUIViewController(context: Context) -> UIViewController {
         fetchVideoRecorderSignature()
@@ -20,21 +22,21 @@ struct VideoRecorderViewWrapper: UIViewControllerRepresentable {
         
         let videoRecorderControll = VideoRecorderController()
         
-        let recordVCEditCallback: (String?, UIImage?) -> Void = { videoPath, photo in
+        let recordVCEditCallback: VideoRecorderRecordResultCallback = { videoPath, photo, duration in
             videoRecorderControll.dismiss(animated: true)
-            var mediaType:MediaType = .video
             var finalPath: String?
-            if let videoPath = videoPath {
-                finalPath = videoPath
-                mediaType = .video
+            if let finalPath = videoPath {
+                onVideoCaptured(videoPath, Int(duration), getThumbnail(finalPath))
+                return
             }
             
             if let photo = photo {
-                finalPath =  saveImage(photo)
-                mediaType = .photo
+                finalPath = saveImage(photo)
+                onPhotoCaptured(finalPath)
+                return
             }
             
-            onMediaCaptured(finalPath, mediaType)
+            onPhotoCaptured(nil)
         }
     
         videoRecorderControll.resultCallback = recordVCEditCallback
@@ -42,7 +44,7 @@ struct VideoRecorderViewWrapper: UIViewControllerRepresentable {
         return videoRecorderControll
     }
     
-    func saveImage(_ image: UIImage) -> String? {
+    private func saveImage(_ image: UIImage) -> String? {
         
         if let imageData = image.jpegData(compressionQuality: 0.8)
         {
@@ -59,6 +61,26 @@ struct VideoRecorderViewWrapper: UIViewControllerRepresentable {
         let directory = (path as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: nil)
         return path
+    }
+    
+    private func getThumbnail(_ videoPath: String) -> String? {
+        let thumbnail = createThumbnail(from: URL(fileURLWithPath: videoPath))
+        if let thumbnail = thumbnail {
+            return saveImage(thumbnail)
+        }
+        return nil
+    }
+
+    private func createThumbnail(from videoURL: URL) -> UIImage? {
+        let asset = AVAsset(url: videoURL)
+        let imageGenerator = AVAssetImageGenerator(asset: asset)
+        imageGenerator.appliesPreferredTrackTransform = true
+        do {
+            let thumbnailCGImage = try imageGenerator.copyCGImage(at: CMTime(seconds: 0, preferredTimescale: 60), actualTime: nil)
+            return UIImage(cgImage: thumbnailCGImage)
+        } catch {
+            return nil
+        }
     }
     
     func buildConfigJSON(from config: VideoRecorderConfig?) -> String? {
@@ -83,7 +105,7 @@ struct VideoRecorderViewWrapper: UIViewControllerRepresentable {
             configDict["record_mode"] = mode.rawValue
         }
         
-        if let color = config.primaryColor {
+        if let color = primaryColor {
             configDict["primary_theme_color"] = color
         }
         
@@ -122,7 +144,6 @@ struct VideoRecorderViewWrapper: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {}
 }
 #endif
-
 
 public func fetchVideoRecorderSignature() {
     if (VideoRecordSignatureChecker.shareInstance().getSetSignatureResult() == .VIDEO_RECORD_SIGNATURE_SUCCESS) {

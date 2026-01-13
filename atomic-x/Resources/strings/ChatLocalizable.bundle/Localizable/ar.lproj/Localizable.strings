@@ -243,7 +243,9 @@
 "MessageTypeRiskImage" = "[صور غير قانونية]";
 "MessageTypeRiskVoice" = "[صوت غير قانوني]";
 "MessageTypeRiskVideo" = "[فيديو مخالف]";
+"MessageTypeMergedHistory" = "سجل الدردشة";
 "MessageTypeLastMsgCountFormat" = "رسالة";
+"MessageTypeSecurityStrikeInfo" = "يحتوي على محتوى حساس.";
 "MessageTypeSecurityStrike" = "تم تضمين محتوى حساس، فشل الإرسال";
 "MessageTypeSecurityStrikeVoice" = "المحتوى الحساس المتضمن، لا يمكن الاستماع إليه";
 "MessageTypeSecurityStrikeImage" = "محتوى حساس متضمن ولا يمكن مشاهدته";
@@ -345,6 +347,7 @@
 "RelayOneByOneForward" = "إعادة التوجيه بشكل فردي";
 "RelayCombineForwad" = "دمج إعادة التوجيه";
 "RelayGroupChatHistory" = "سجل الدردشة الجماعية";
+"RelayC2CChatHistoryFormat" = "سجل دردشة %@";
 "RelayChatHistoryForSomebodyFormat" = "سجل الدردشة لـ %@ و %@";
 "RelayErrorForwardFormat" = "@فشل إعادة التوجيه، code:%d, desc:%@";
 "RelayTargetCreateNewChat" = "إنشاء دردشة جديدة";
@@ -739,7 +742,7 @@
 "GroupCreated" = "تم إنشاء الدردشة الجماعية";
 "CommunityCreated" = "تم إنشاء المجتمع";
 "ChooseAnAction" = "اختر إجراء";
-"MessageCount"  = "يجرد";
+"MessageCount" = "يجرد";
 "QuickReplyOK" = "حسنًا، لا مشكلة";
 "QuickReplyWait" = "انتظر، سأرد قريبًا";
 "QuickReplyThanks" = "شكرًا!";
@@ -747,7 +750,7 @@
 "QuickReplyProcessing" = "جاري المعالجة";
 "AudioRecordTimeLimitReached" = "لقد تم الوصول إلى الحد الزمني لتسجيل الصوت";
 "AudioRecorderLessThanMinTime" = "تسجيل الصوت طويل جدا و قصير جدا";
-"AudioAuthorizationPrompter" = “التكوين الحالي لا يمكن تمكين منظمة العفو الدولية للحد من الضوضاء . تصحيح الإصدارات فقط”;
+"AudioAuthorizationPrompter" = "التكوين الحالي لا يمكن تمكين منظمة العفو الدولية للحد من الضوضاء . تصحيح الإصدارات فقط";
 "ChooseMediaType" = "اختر نوع الوسائط";
 "SendMessage" = "Send a message";
 "AudioDownloadFailed" = "فشل تحميل الرسالة الصوتية";
@@ -778,3 +781,12 @@
 "GetGroupSettingInfoFailed" = "فشل في الحصول على معلومات إعدادات المجموعة";
 "VoiceSendMessageDesc" = "مرر لأعلى للإلغاء أو حرّر للإرسال";
 "VoiceSendMessageCancelDesc" = "حرّر للإلغاء";
+"MessageReadReceipt" = "حالة قراءة الرسالة";
+"MessageReadReceiptEnabledDesc" = "عند الإغلاق، لن تظهر حالة قراءة الرسائل في الرسائل التي تستلمها أو ترسلها، ولن تتمكن من معرفة ما إذا قرأ الطرف الآخر الرسالة أم لا، وبالمثل، الطرف الآخر لن يتمكن من معرفة ما إذا قرأت الرسالة أم لا.";
+"MessageReadReceiptDisabledDesc" = "عند الفتح، ستظهر حالة قراءة الرسائل في الرسائل التي تستلمها أو ترسلها في المحادثات الجماعية، ويمكنك رؤية ما إذا قرأ الطرف الآخر الرسالة أم لا. إذا قام أصدقاؤك في المحادثات الفردية بتفعيل حالة قراءة الرسائل، ستظهر حالة قراءة الرسائل في المحادثات الفردية التي تتبادلها معهم.";
+"Style" = "مظهر";
+
+"MentionSelectMember" = "اختيار عضو المجموعة";
+"MentionAll" = "الجميع";
+"MentionAtAllTag" = "[@الجميع]";
+"MentionAtMeTag" = "[شخص ما @أنت]";
