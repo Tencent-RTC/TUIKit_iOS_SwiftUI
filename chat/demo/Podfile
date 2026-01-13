@@ -5,7 +5,7 @@ target 'ChatDemo' do
   
   pod 'AtomicX/Chat', :path => '../../atomic-x/AtomicX.podspec'
   pod 'ChatUIKit', :path => '../uikit/ChatUIKit.podspec'
-  pod 'AtomicXCore', '3.5.0'
+  pod 'AtomicXCore', '3.6.1'
 
 end 
 
