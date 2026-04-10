@@ -2,16 +2,14 @@ import CommonCrypto
 import Foundation
 import zlib
 
-@objc
-public class GenerateTestUserSig: NSObject {
-    @objc
+public class GenerateTestUserSig {
+    public static let sdkAppID: Int = <#Your SDK AppID#>
+    public static let secretKey: String = "<#Your Secret Key#>"
+
     public class func genTestUserSig(identifier: String) -> String {
-        let sdkAppID = <#Your SDK AppID#>
-        let secretKey = <#Your Secret Key#>
         return genTestUserSig(userID: identifier, sdkAppID: sdkAppID, secretKey: secretKey)
     }
 
-    @objc
     public class func genTestUserSig(userID: String, sdkAppID: Int, secretKey: String) -> String {
         // Signature expiration time, it is recommended not to set it too short.
         // Default time: 7 x 24 x 60 x 60 = 604800 = 7 days

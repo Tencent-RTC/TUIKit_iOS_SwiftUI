@@ -62,8 +62,6 @@ struct LoginPage: View {
     @EnvironmentObject var languageState: LanguageState
     @StateObject private var loginManager = LoginStatusManager.shared
     @State private var userID: String = ""
-    @State private var sdkAppID: String = ""
-    @State private var secretKey: String = ""
     @State private var isShowingSettings: Bool = false
 
     var body: some View {
@@ -122,11 +120,8 @@ struct LoginPage: View {
     }
 
     private func login() {
-        guard let appID = Int32(sdkAppID) else {
-            loginManager.loginError = LocalizedChatString("InvalidSDKAppID")
-            return
-        }
-        let userSig = GenerateTestUserSig.genTestUserSig(userID: userID, sdkAppID: Int(appID), secretKey: secretKey)
+        let appID = Int32(GenerateTestUserSig.sdkAppID)
+        let userSig = GenerateTestUserSig.genTestUserSig(userID: userID, sdkAppID: GenerateTestUserSig.sdkAppID, secretKey: GenerateTestUserSig.secretKey)
         loginManager.login(sdkAppID: appID, userID: userID, userSig: userSig) { _ in
             loginManager.isLoggingIn = false
         }
