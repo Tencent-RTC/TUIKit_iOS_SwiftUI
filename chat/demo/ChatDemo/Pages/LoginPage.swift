@@ -62,8 +62,8 @@ struct LoginPage: View {
     @EnvironmentObject var languageState: LanguageState
     @StateObject private var loginManager = LoginStatusManager.shared
     @State private var userID: String = ""
-    @State private var sdkAppID: String = "<#Your SDKAppID#>"
-    @State private var secretKey: String = "<#Your SecretKey#>"
+    @State private var sdkAppID: String = ""
+    @State private var secretKey: String = ""
     @State private var isShowingSettings: Bool = false
 
     var body: some View {
