@@ -11,14 +11,21 @@ struct TextMessageView: View {
     @State private var translationBubbleFrame: CGRect = .zero
     @State private var pendingSplitResult: [String: Any]? = nil
     @State private var pendingOriginalText: String? = nil
-    let messageBody: MessageBody
+    let payload: TextMessagePayload
     let message: MessageInfo
     let isLeft: Bool
     let isSelf: Bool
     let shouldHighlight: Bool
+
+    private var currentPayload: TextMessagePayload {
+        if case .text(let payload) = message.messagePayload {
+            return payload
+        }
+        return payload
+    }
     
-    init(messageBody: MessageBody, message: MessageInfo, isLeft: Bool, isSelf: Bool, shouldHighlight: Bool) {
-        self.messageBody = messageBody
+    init(payload: TextMessagePayload, message: MessageInfo, isLeft: Bool, isSelf: Bool, shouldHighlight: Bool) {
+        self.payload = payload
         self.message = message
         self.isLeft = isLeft
         self.isSelf = isSelf
@@ -34,12 +41,13 @@ struct TextMessageView: View {
     private var shouldShowTranslationBubble: Bool {
         if isTranslating { return true }
         if !isTranslationExpanded { return false }
-        let translatedText = messageBody.translatedText ?? [:]
+        let translatedText = currentPayload.translatedText ?? [:]
         return !translatedText.isEmpty
     }
 
     var body: some View {
-        if let text = messageBody.text {
+        let text = currentPayload.text
+        if !text.isEmpty {
             VStack(alignment: isSelf ? .trailing : .leading, spacing: 6) {
                 // Text bubble
                 textBubbleContent(text: text)
@@ -98,8 +106,8 @@ struct TextMessageView: View {
     
     @ViewBuilder
     private var translationBubbleView: some View {
-        let translatedTextMap = messageBody.translatedText ?? [:]
-        let originalText = messageBody.text ?? ""
+        let translatedTextMap = currentPayload.translatedText ?? [:]
+        let originalText = currentPayload.text
         let translatedText = buildTranslatedDisplayText(originalText: originalText, translatedTextMap: translatedTextMap)
         
         Group {
@@ -169,14 +177,6 @@ struct TextMessageView: View {
     private func showTranslationMenu(translatedText: String) {
         let actions = [
             AuxiliaryTextMenuAction(
-                iconName: "message_hide",
-                systemIconFallback: "eye.slash",
-                label: LocalizedChatString("Hide")
-            ) {
-                isTranslationExpanded = false
-                translationDisplayManager.collapse(message.msgID)
-            },
-            AuxiliaryTextMenuAction(
                 iconName: "message_forward",
                 systemIconFallback: "arrowshape.turn.up.right",
                 label: LocalizedChatString("Forward")
@@ -206,7 +206,8 @@ struct TextMessageView: View {
         translationDisplayManager.expand(message.msgID)
         
         // Get text to translate
-        guard let text = messageBody.text, !text.isEmpty else {
+        let text = currentPayload.text
+        guard !text.isEmpty else {
             isTranslating = false
             return
         }
@@ -229,7 +230,7 @@ struct TextMessageView: View {
                 NotificationCenter.default.post(
                     name: NSNotification.Name("translationCompleted"),
                     object: nil,
-                    userInfo: ["msgID": self.message.msgID ?? ""]
+                    userInfo: ["msgID": self.message.msgID]
                 )
             }
             return
@@ -272,20 +273,19 @@ struct TextMessageView: View {
         pendingSplitResult = nil
         pendingOriginalText = nil
         
-        // Translation result is already saved to localCustomData by MessageListStoreImpl
-        // UI will read from messageBody.translatedText
+        // Translation result is persisted into messagePayload by AtomicXCore.
         NotificationCenter.default.post(
             name: NSNotification.Name("translationCompleted"),
             object: nil,
-            userInfo: ["msgID": message.msgID ?? ""]
+            userInfo: ["msgID": message.msgID]
         )
     }
     
     // MARK: - Forward Translated Text
     
     private func forwardTranslatedText() {
-        let translatedTextMap = messageBody.translatedText ?? [:]
-        let originalText = messageBody.text ?? ""
+        let translatedTextMap = currentPayload.translatedText ?? [:]
+        let originalText = currentPayload.text
         let translatedText = buildTranslatedDisplayText(originalText: originalText, translatedTextMap: translatedTextMap)
         guard !translatedText.isEmpty else { return }
         NotificationCenter.default.post(

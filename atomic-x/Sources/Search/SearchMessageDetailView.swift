@@ -15,14 +15,14 @@ struct SearchMessageDetailView: View {
     @State private var searchStore: SearchStore
     let conversationID: String
     let conversationName: String
-    let conversationAvatar: String
+    let conversationAvatar: String?
     let initialKeyword: String
     let onTapItem: (Any) -> Void
 
     init(
         conversationID: String,
         conversationName: String,
-        conversationAvatar: String,
+        conversationAvatar: String?,
         keyword: String,
         onTapItem: @escaping (Any) -> Void
     ) {
@@ -210,7 +210,7 @@ struct SearchMessageDetailView: View {
         } label: {
             HStack(spacing: 12) {
                 Avatar(
-                    url: message.sender.avatarURL,
+                    url: message.from.avatarURL,
                     name: ChatUtil.getMessageSenderName(message),
                     size: .m
                 )
@@ -295,8 +295,8 @@ struct SearchMessageDetailView: View {
         guard !text.isEmpty else { return }
         isSearching = true
         var option = SearchOption()
-        option.searchType = .message
-        option.searchCount = 10
+        option.searchScope = [.message]
+        option.pageSize = 10
         var messageFilter = MessageSearchFilter()
         messageFilter.conversationID = conversationID
         option.messageFilter = messageFilter
@@ -318,8 +318,8 @@ struct SearchMessageDetailView: View {
                     isSearching = true
                 }
                 var option = SearchOption()
-                option.searchType = .message
-                option.searchCount = 10
+                option.searchScope = [.message]
+                option.pageSize = 10
                 var messageFilter = MessageSearchFilter()
                 messageFilter.conversationID = conversationID
                 option.messageFilter = messageFilter

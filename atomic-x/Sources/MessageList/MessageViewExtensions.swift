@@ -163,7 +163,7 @@ struct BubbleBackground: ViewModifier {
                 .resizable()
                 .frame(width: 14, height: 14)
                 .padding(.trailing, 8)
-                .padding(.bottom, message.messageType == .sound ? 2 : 6)
+                .padding(.bottom, message.messageType == .audio ? 2 : 6)
         }
     }
 

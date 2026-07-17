@@ -4,42 +4,31 @@ import SwiftUI
 struct VideoMessageView: View {
     @EnvironmentObject var themeState: ThemeState
     @Environment(\.isInMergedDetailView) private var isInMergedDetailView
-    let messageBody: MessageBody
+    let payload: VideoMessagePayload
     let message: MessageInfo
     let messageListStore: MessageListStore
     let onVideoTap: () -> Void
     let onPlayVideo: () -> Void
     
     private var sendProgress: Double {
-        Double(message.progress) / 100.0
+        Double(message.uploadMediaProgress) / 100.0
     }
     
     private var isSending: Bool {
-        message.status == .sending && message.isSelf && message.progress < 100
+        message.status == .sending && message.isSentBySelf && message.uploadMediaProgress < 100
+    }
+
+    private var currentPayload: VideoMessagePayload {
+        if let updatedMessage = messageListStore.state.value.messageList.first(where: { $0.msgID == message.msgID }),
+           case .video(let payload) = updatedMessage.messagePayload {
+            return payload
+        }
+        return payload
     }
 
     var body: some View {
         ZStack(alignment: .center) {
-            if let snapshotPath = messageBody.videoSnapshotPath {
-                Image(uiImage: UIImage(contentsOfFile: snapshotPath) ?? UIImage())
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                    .frame(width: 200, height: 300)
-                    .cornerRadius(16)
-                    .clipped()
-            } else {
-                ZStack {
-                    Rectangle()
-                        .fill(themeState.colors.bgColorBubbleReciprocal)
-                        .frame(width: 200, height: 150)
-                        .cornerRadius(16)
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle())
-                        .onAppear {
-                            messageListStore.downloadMessageResource(message, resourceType: .videoSnapshot) { _ in }
-                        }
-                }
-            }
+            snapshotImageView
             
             if isSending {
                 Rectangle()
@@ -86,8 +75,8 @@ struct VideoMessageView: View {
                 .buttonStyle(PlainButtonStyle())
             }
             
-            if messageBody.videoDuration > 0 && !isSending {
-                Text(formatDuration(messageBody.videoDuration))
+            if currentPayload.videoDuration > 0 && !isSending {
+                Text(formatDuration(currentPayload.videoDuration))
                     .font(.system(size: 12))
                     .foregroundColor(.white)
                     .padding(.horizontal, 6)
@@ -122,6 +111,58 @@ struct VideoMessageView: View {
             }
         }
         .buttonStyle(ScaleButtonStyle())
+    }
+
+    @ViewBuilder
+    private var snapshotImageView: some View {
+        // Prefer a local snapshot file so we never hit the network when the SDK has already
+        // cached it. Otherwise fall back to the remote snapshot URL (filled in by
+        // ChatUtil.convertToMessagePayload for normal messages and by
+        // MessageActionStoreImpl.fillMediaURLsForMergedMessages for merged sub-messages).
+        // The placeholder still triggers a thumbnail download so that subsequent renders pick
+        // up the local file via the messageListStore reactive path (normal chat list flow).
+        if let snapshotPath = currentPayload.videoSnapshotPath,
+           !snapshotPath.isEmpty,
+           FileManager.default.fileExists(atPath: snapshotPath),
+           let image = UIImage(contentsOfFile: snapshotPath)
+        {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .frame(width: 200, height: 300)
+                .cornerRadius(16)
+                .clipped()
+        } else if let urlString = currentPayload.videoSnapshotURL,
+                  !urlString.isEmpty,
+                  let url = URL(string: urlString)
+        {
+            CompatibleKFImage(
+                url: url,
+                width: 200,
+                height: 300,
+                contentMode: .fill,
+                fallback: { AnyView(snapshotPlaceholder) }
+            )
+            .frame(width: 200, height: 300)
+            .cornerRadius(16)
+            .clipped()
+        } else {
+            snapshotPlaceholder
+                .onAppear {
+                    MessageActionStore.create(message: message).downloadMedia(quality: .thumbnail) { _ in }
+                }
+        }
+    }
+
+    private var snapshotPlaceholder: some View {
+        ZStack {
+            Rectangle()
+                .fill(themeState.colors.bgColorBubbleReciprocal)
+                .frame(width: 200, height: 150)
+                .cornerRadius(16)
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle())
+        }
     }
 
     private func formatDuration(_ seconds: Int) -> String {

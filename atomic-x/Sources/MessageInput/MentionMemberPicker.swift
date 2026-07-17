@@ -1,6 +1,18 @@
 import AtomicXCore
 import SwiftUI
 
+private func displayName(for member: GroupMember) -> String {
+    if let nameCard = member.nameCard, !nameCard.isEmpty {
+        return nameCard
+    } else if let friendRemark = member.friendRemark, !friendRemark.isEmpty {
+        return friendRemark
+    } else if let nickname = member.nickname, !nickname.isEmpty {
+        return nickname
+    } else {
+        return member.userID
+    }
+}
+
 /// A picker view for selecting group members to mention (supports multi-selection)
 struct MentionMemberPicker: View {
     @Environment(\.presentationMode) var presentationMode
@@ -70,7 +82,7 @@ struct MentionMemberPicker: View {
             .map { member in
                 MentionInfo.create(
                     userID: member.userID,
-                    displayName: member.displayName,
+                    displayName: displayName(for: member),
                     atPosition: atPosition
                 )
             }
@@ -149,11 +161,12 @@ struct MentionMemberPicker: View {
     }
     
     private func toUserPickerItem(_ member: GroupMember) -> UserPickerItem {
-        UserPickerItem(
+        let title = displayName(for: member)
+        return UserPickerItem(
             userID: member.userID,
             avatarURL: member.avatarURL,
-            title: member.displayName,
-            subtitle: member.userID != member.displayName ? member.userID : nil,
+            title: title,
+            subtitle: member.userID != title ? member.userID : nil,
             isDisabled: false
         )
     }
@@ -174,20 +187,18 @@ class MentionMemberPickerViewModel: ObservableObject {
     @Published var isLoading = false
     @Published var isLoadingMore = false
     
-    private let groupID: String
-    private var settingStore: GroupSettingStore
+    private var memberStore: GroupMemberStore
     private var hasMoreData = true
     
     init(groupID: String) {
-        self.groupID = groupID
-        self.settingStore = GroupSettingStore.create(groupID: groupID)
+        self.memberStore = GroupMemberStore.create(groupID: groupID)
     }
     
     func loadMembers() {
         guard !isLoading else { return }
         isLoading = true
         
-        settingStore.fetchGroupMemberList(role: .all) { [weak self] result in
+        memberStore.loadMembers(roleList: [.all]) { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoading = false
                 switch result {
@@ -204,7 +215,7 @@ class MentionMemberPickerViewModel: ObservableObject {
         guard !isLoadingMore && hasMoreData else { return }
         isLoadingMore = true
         
-        settingStore.fetchMoreGroupMemberList { [weak self] result in
+        memberStore.loadMoreMembers { [weak self] result in
             DispatchQueue.main.async {
                 self?.isLoadingMore = false
                 switch result {
@@ -219,7 +230,7 @@ class MentionMemberPickerViewModel: ObservableObject {
     }
     
     private func updateMembersFromState() {
-        let newMembers = settingStore.state.value.allMembers
+        let newMembers = memberStore.state.value.memberList
         if newMembers.count == members.count {
             hasMoreData = false
         }

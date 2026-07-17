@@ -120,6 +120,10 @@ struct LoginPage: View {
     }
 
     private func login() {
+        guard GenerateTestUserSig.sdkAppID > 0, !GenerateTestUserSig.secretKey.isEmpty else {
+            loginManager.loginError = "Configure SDKAppID and SecretKey in GenerateTestUserSig.swift"
+            return
+        }
         let appID = Int32(GenerateTestUserSig.sdkAppID)
         let userSig = GenerateTestUserSig.genTestUserSig(userID: userID, sdkAppID: GenerateTestUserSig.sdkAppID, secretKey: GenerateTestUserSig.secretKey)
         loginManager.login(sdkAppID: appID, userID: userID, userSig: userSig) { _ in

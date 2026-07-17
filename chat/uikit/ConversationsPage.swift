@@ -27,10 +27,8 @@ public struct ConversationsPage: View {
     @State var friendList: [ContactInfo] = []
 
     var onConversationClick: ((NavigationInfo) -> Void)?
-    private var contactListStore: ContactListStore
 
     public init(onConversationClick: ((NavigationInfo) -> Void)? = nil) {
-        self.contactListStore = ContactListStore.create()
         self.onConversationClick = onConversationClick
     }
 
@@ -51,13 +49,13 @@ public struct ConversationsPage: View {
             .environmentObject(themeState)
         }
         .background(themeState.colors.bgColorOperate.ignoresSafeArea(edges: .top))
-        .onReceive(contactListStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.friendList))) { friendList in
+        .onReceive(ContactStore.shared.state.subscribe(StatePublisherSelector(keyPath: \ContactState.friendList))) { friendList in
             if self.friendList != friendList {
                 self.friendList = friendList
             }
         }
         .onAppear {
-            contactListStore.fetchFriendList(completion: { _ in })
+            ContactStore.shared.loadFriends(completion: nil)
         }
         .overlay(
             ChatsMenuOverlay(
@@ -68,7 +66,6 @@ public struct ConversationsPage: View {
         )
         .sheet(isPresented: $showStartConversation) {
             StartConversationSheet(
-                contactListStore: contactListStore,
                 onUserSelected: { user in
                     showStartConversation = false
                     let conversation = createConversationFromUser(user)
@@ -80,7 +77,6 @@ public struct ConversationsPage: View {
             if selectedUsersContainer.users.isEmpty {}
         }) {
             UserPickerSheet(
-                contactListStore: contactListStore,
                 selectedUsersContainer: selectedUsersContainer,
                 showUserPicker: $showUserPicker,
                 showConfigSheet: $showConfigSheet
@@ -91,7 +87,6 @@ public struct ConversationsPage: View {
         }) {
             ConfigGroupInfoView(
                 members: selectedUsersContainer.users,
-                contactListStore: contactListStore,
                 onComplete: { createdGroupID, groupName, conversationId in
                     showConfigSheet = false
                     if let groupID = createdGroupID,
@@ -147,8 +142,8 @@ public struct ConversationsPage: View {
             let conversationID = ChatUtil.getC2CConversationID(friendInfo.userID)
             var conversation = ConversationInfo(conversationID: conversationID)
             conversation.type = .c2c
-            conversation.title = friendInfo.friendRemark ?? friendInfo.userInfo.nickname
-            conversation.avatarURL = friendInfo.userInfo.avatarURL
+            conversation.title = friendInfo.friendRemark ?? friendInfo.userInfo?.nickname ?? friendInfo.userID
+            conversation.avatarURL = friendInfo.userInfo?.avatarURL
             onConversationClick?(NavigationInfo(conversation: conversation))
         } else if let groupInfo = result as? GroupSearchInfo {
             // Navigate to group conversation
@@ -270,7 +265,6 @@ struct StartConversationSheet: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var friendList: [ContactInfo] = []
     @State private var isLoading = true
-    let contactListStore: ContactListStore
     var onUserSelected: (AZOrderedListItem) -> Void
 
     var body: some View {
@@ -301,7 +295,7 @@ struct StartConversationSheet: View {
         .onAppear {
             loadFriendList()
         }
-        .onReceive(contactListStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.friendList))) { newFriendList in
+        .onReceive(ContactStore.shared.state.subscribe(StatePublisherSelector(keyPath: \ContactState.friendList))) { newFriendList in
             DispatchQueue.main.async {
                 self.friendList = newFriendList
             }
@@ -311,7 +305,7 @@ struct StartConversationSheet: View {
     private func loadFriendList() {
         isLoading = true
 
-        let currentFriendList = contactListStore.state.value.friendList
+        let currentFriendList = ContactStore.shared.state.value.friendList
         if !currentFriendList.isEmpty {
             DispatchQueue.main.async {
                 self.friendList = currentFriendList
@@ -319,7 +313,7 @@ struct StartConversationSheet: View {
             }
         }
 
-        contactListStore.fetchFriendList(completion: { result in
+        ContactStore.shared.loadFriends(completion: { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -335,9 +329,9 @@ struct StartConversationSheet: View {
     private var orderedListItems: [AZOrderedListItem] {
         return friendList.map { contact in
             AZOrderedListItem(
-                userID: contact.contactID,
+                userID: contact.userID,
                 avatarURL: contact.avatarURL,
-                title: contact.title
+                title: contactDisplayName(contact)
             )
         }
     }
@@ -346,7 +340,6 @@ struct StartConversationSheet: View {
 // MARK: - UserPickerSheet
 
 struct UserPickerSheet: View {
-    let contactListStore: ContactListStore
     @ObservedObject var selectedUsersContainer: SelectedUsersContainer
     @Binding var showUserPicker: Bool
     @Binding var showConfigSheet: Bool
@@ -368,10 +361,9 @@ struct UserPickerSheet: View {
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .onAppear {
-            contactListStore.fetchFriendList(completion: { _ in
-            })
+            ContactStore.shared.loadFriends(completion: nil)
         }
-        .onReceive(contactListStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.friendList))) { newFriendList in
+        .onReceive(ContactStore.shared.state.subscribe(StatePublisherSelector(keyPath: \ContactState.friendList))) { newFriendList in
             self.friendList = newFriendList
         }
     }
@@ -380,11 +372,21 @@ struct UserPickerSheet: View {
     private var userPickerItems: [UserPickerItem] {
         let items = friendList.map { contact in
             UserPickerItem(
-                userID: contact.contactID,
+                userID: contact.userID,
                 avatarURL: contact.avatarURL,
-                title: contact.title ?? contact.contactID
+                title: contactDisplayName(contact)
             )
         }
         return items
+    }
+}
+
+private func contactDisplayName(_ contact: ContactInfo) -> String {
+    if let friendRemark = contact.friendRemark, !friendRemark.isEmpty {
+        return friendRemark
+    } else if let nickname = contact.nickname, !nickname.isEmpty {
+        return nickname
+    } else {
+        return contact.userID
     }
 }

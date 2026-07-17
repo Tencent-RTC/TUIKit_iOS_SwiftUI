@@ -148,9 +148,7 @@ struct ChatNavPage: View {
 
 // MARK: - NestedC2CSetting
 // A wrapper that handles nested navigation from C2CChatSetting to a new chat page.
-// Note: This struct creates its own C2CSettingStore instance, separate from the one inside C2CChatSetting.
-// This is intentional because we need to access user info (nickname, remark, avatarURL) for creating
-// the nested conversation before navigating. The two store instances will fetch the same data independently.
+// Fetches contact info separately so nested navigation can create a conversation before opening it.
 
 private struct NestedC2CSetting: View {
     @EnvironmentObject var themeState: ThemeState
@@ -163,11 +161,9 @@ private struct NestedC2CSetting: View {
     @State private var showNestedChat: Bool = false
     @State private var nestedConversation: ConversationInfo? = nil
     
-    // User info from C2CSettingStore (updated via onReceive)
     @State private var userRemark: String = ""
     @State private var userNickname: String = ""
     @State private var userAvatarURL: String = ""
-    @State private var settingStore: C2CSettingStore
     
     init(
         userID: String,
@@ -179,7 +175,6 @@ private struct NestedC2CSetting: View {
         self.parentConversationID = parentConversationID
         self.onBack = onBack
         self.onContactDelete = onContactDelete
-        self._settingStore = State(initialValue: C2CSettingStore.create(userID: userID))
     }
     
     private var displayName: String {
@@ -219,18 +214,22 @@ private struct NestedC2CSetting: View {
                 .hidden()
             }
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.remark))) { remark in
-            self.userRemark = remark
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.nickname))) { nickname in
-            self.userNickname = nickname
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.avatarURL))) { avatarURL in
-            self.userAvatarURL = avatarURL
-        }
         .onAppear {
             // Fetch user info to ensure displayName is available
-            settingStore.fetchUserInfo(completion: nil)
+            ContactStore.shared.getContactInfo(
+                userIDList: [userID],
+                completion: NestedContactInfoHandler(
+                    onSuccess: { contactInfoList in
+                        guard let contactInfo = contactInfoList.first else { return }
+                        DispatchQueue.main.async {
+                            self.userRemark = contactInfo.friendRemark ?? ""
+                            self.userNickname = contactInfo.nickname ?? ""
+                            self.userAvatarURL = contactInfo.avatarURL ?? ""
+                        }
+                    },
+                    onFailure: { _, _ in }
+                )
+            )
         }
     }
     
@@ -254,6 +253,24 @@ private struct NestedC2CSetting: View {
     
     private func dismissNestedChat() {
         showNestedChat = false
+    }
+}
+
+private final class NestedContactInfoHandler: GetContactInfoCompletionHandler {
+    private let onSuccessBlock: ([ContactInfo]) -> Void
+    private let onFailureBlock: (Int, String) -> Void
+
+    init(onSuccess: @escaping ([ContactInfo]) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessBlock = onSuccess
+        self.onFailureBlock = onFailure
+    }
+
+    func onSuccess(contactInfoList: [ContactInfo]) {
+        onSuccessBlock(contactInfoList)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureBlock(code, desc)
     }
 }
 

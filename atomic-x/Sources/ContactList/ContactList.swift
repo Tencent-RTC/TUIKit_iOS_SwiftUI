@@ -14,16 +14,13 @@ public struct ContactList: View {
     @State private var showGroupList: Bool = false
     @State private var showBlackList: Bool = false
     
-    private let contactStore: ContactListStore
     private let onContactClick: ((AZOrderedListItem) -> Void)?
     private let onGroupClick: ((AZOrderedListItem) -> Void)?
 
     public init(
-        contactStore: ContactListStore = ContactListStore.create(),
         onContactClick: ((AZOrderedListItem) -> Void)? = nil,
         onGroupClick: ((AZOrderedListItem) -> Void)? = nil
     ) {
-        self.contactStore = contactStore
         self.onContactClick = onContactClick
         self.onGroupClick = onGroupClick
     }
@@ -31,9 +28,9 @@ public struct ContactList: View {
     public var body: some View {
         let userList = friendList.map { contact in
             AZOrderedListItem(
-                userID: contact.contactID,
+                userID: contact.userID,
                 avatarURL: contact.avatarURL,
-                title: contact.title
+                title: contactDisplayName(contact)
             )
         }
 
@@ -86,21 +83,18 @@ public struct ContactList: View {
         .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .fullScreenCover(isPresented: $showNewFriends) {
             FriendApplicationListView(
-                contactStore: contactStore,
                 onDismiss: { showNewFriends = false }
             )
             .environmentObject(themeState)
         }
         .fullScreenCover(isPresented: $showGroupApplications) {
             GroupApplicationListView(
-                contactStore: contactStore,
                 onDismiss: { showGroupApplications = false }
             )
             .environmentObject(themeState)
         }
         .fullScreenCover(isPresented: $showGroupList) {
             GroupListView(
-                contactStore: contactStore,
                 onGroupClick: { group in
                     showGroupList = false
                     onGroupClick?(group)
@@ -111,13 +105,12 @@ public struct ContactList: View {
         }
         .fullScreenCover(isPresented: $showBlackList) {
             BlackListView(
-                contactStore: contactStore,
                 onDismiss: { showBlackList = false }
             )
             .environmentObject(themeState)
         }
-        .onReceive(contactStore.state
-            .subscribe(StatePublisherSelector(keyPath: \ContactListState.friendList))
+        .onReceive(ContactStore.shared.state
+            .subscribe(StatePublisherSelector(keyPath: \ContactState.friendList))
             .receive(on: RunLoop.main)
         ) { friendList in
             if friendList.isEmpty && !self.friendList.isEmpty {
@@ -127,14 +120,14 @@ public struct ContactList: View {
                 self.friendList = friendList
             }
         }
-        .onReceive(contactStore.state
-            .subscribe(StatePublisherSelector(keyPath: \ContactListState.friendApplicationUnreadCount))
+        .onReceive(ContactStore.shared.state
+            .subscribe(StatePublisherSelector(keyPath: \ContactState.friendApplicationUnreadCount))
             .receive(on: RunLoop.main)
         ) { friendApplicationUnreadCount in
             self.friendApplicationUnreadCount = friendApplicationUnreadCount
         }
-        .onReceive(contactStore.state
-            .subscribe(StatePublisherSelector(keyPath: \ContactListState.groupApplicationUnreadCount))
+        .onReceive(GroupStore.shared.state
+            .subscribe(StatePublisherSelector(keyPath: \GroupState.unreadApplicationCount))
             .receive(on: RunLoop.main)
         ) { groupApplicationUnreadCount in
             self.groupApplicationUnreadCount = groupApplicationUnreadCount
@@ -146,16 +139,18 @@ public struct ContactList: View {
     }
 
     private func fetchData() {
-        contactStore.fetchFriendList(completion: nil)
-        contactStore.fetchGroupApplicationList(completion: nil)
+        ContactStore.shared.loadFriends(completion: nil)
+        ContactStore.shared.loadFriendApplications(completion: nil)
+        GroupStore.shared.loadApplications(completion: nil)
     }
 
     private func syncCurrentStateFromStore() {
-        let state = contactStore.state.value
+        let contactState = ContactStore.shared.state.value
+        let groupState = GroupStore.shared.state.value
         DispatchQueue.main.async {
-            self.friendList = state.friendList
-            self.friendApplicationUnreadCount = state.friendApplicationUnreadCount
-            self.groupApplicationUnreadCount = state.groupApplicationUnreadCount
+            self.friendList = contactState.friendList
+            self.friendApplicationUnreadCount = contactState.friendApplicationUnreadCount
+            self.groupApplicationUnreadCount = groupState.unreadApplicationCount
         }
     }
 }
@@ -206,9 +201,9 @@ private struct FriendApplicationCell: View {
             HStack {
                 Avatar(
                     url: application.avatarURL,
-                    name: application.title ?? application.applicationID
+                    name: friendApplicationDisplayName(application)
                 )
-                Text(application.title ?? application.applicationID)
+                Text(friendApplicationDisplayName(application))
                     .font(.body)
                     .foregroundColor(themeState.colors.textColorPrimary)
 
@@ -370,23 +365,20 @@ private struct SubPageNavigationBar: View {
 
 public struct GroupListView: View {
     @EnvironmentObject var themeState: ThemeState
-    @State private var groupList: [ContactInfo] = []
-    private var contactStore: ContactListStore
+    @State private var groupList: [GroupInfo] = []
     private let onGroupClick: ((AZOrderedListItem) -> Void)?
     private let onDismiss: (() -> Void)?
 
     public init(
-        contactStore: ContactListStore,
         onGroupClick: ((AZOrderedListItem) -> Void)? = nil,
         onDismiss: (() -> Void)? = nil
     ) {
-        self.contactStore = contactStore
         self.onGroupClick = onGroupClick
         self.onDismiss = onDismiss
     }
 
     private func fetchData() {
-        contactStore.fetchJoinedGroupList(completion: nil)
+        GroupStore.shared.loadJoinedGroups(completion: nil)
     }
 
     public var body: some View {
@@ -398,21 +390,21 @@ public struct GroupListView: View {
             
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(groupList, id: \.contactID) { group in
+                    ForEach(groupList, id: \.groupID) { group in
                         Button(action: {
                             let groupItem = AZOrderedListItem(
-                                userID: group.contactID,
+                                userID: group.groupID,
                                 avatarURL: group.avatarURL,
-                                title: group.title ?? group.contactID
+                                title: groupDisplayName(group)
                             )
                             onGroupClick?(groupItem)
                         }) {
                             HStack {
                                 Avatar(
                                     url: group.avatarURL,
-                                    name: group.title ?? group.contactID
+                                    name: groupDisplayName(group)
                                 )
-                                Text(group.title ?? group.contactID)
+                                Text(groupDisplayName(group))
                                     .font(.body)
                                     .foregroundColor(themeState.colors.textColorPrimary)
                                 Spacer()
@@ -428,9 +420,9 @@ public struct GroupListView: View {
         }
         .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .onAppear {
-            contactStore.fetchJoinedGroupList(completion: nil)
+            fetchData()
         }
-        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.groupList))) { groupList in
+        .onReceive(GroupStore.shared.state.subscribe(StatePublisherSelector(keyPath: \GroupState.joinedGroupList))) { groupList in
             self.groupList = groupList
         }
     }
@@ -441,14 +433,11 @@ public struct GroupListView: View {
 public struct BlackListView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var blackList: [ContactInfo] = []
-    private var contactStore: ContactListStore
     private let onDismiss: (() -> Void)?
 
     public init(
-        contactStore: ContactListStore,
         onDismiss: (() -> Void)? = nil
     ) {
-        self.contactStore = contactStore
         self.onDismiss = onDismiss
     }
 
@@ -461,13 +450,13 @@ public struct BlackListView: View {
             
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(blackList, id: \.contactID) { contact in
+                    ForEach(blackList, id: \.userID) { contact in
                         HStack {
                             Avatar(
                                 url: contact.avatarURL,
-                                name: contact.title ?? contact.contactID
+                                name: contactDisplayName(contact)
                             )
-                            Text(contact.title ?? contact.contactID)
+                            Text(contactDisplayName(contact))
                                 .font(.body)
                                 .foregroundColor(themeState.colors.textColorPrimary)
                             Spacer()
@@ -481,9 +470,9 @@ public struct BlackListView: View {
         }
         .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .onAppear {
-            contactStore.fetchBlackList(completion: nil)
+            ContactStore.shared.loadBlackList(completion: nil)
         }
-        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.blackList))) { blackList in
+        .onReceive(ContactStore.shared.state.subscribe(StatePublisherSelector(keyPath: \ContactState.blackList))) { blackList in
             self.blackList = blackList
         }
     }
@@ -494,14 +483,11 @@ public struct BlackListView: View {
 public struct FriendApplicationListView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var friendApplicationList: [FriendApplicationInfo] = []
-    private var contactStore: ContactListStore
     private let onDismiss: (() -> Void)?
 
     public init(
-        contactStore: ContactListStore,
         onDismiss: (() -> Void)? = nil
     ) {
-        self.contactStore = contactStore
         self.onDismiss = onDismiss
     }
 
@@ -514,11 +500,11 @@ public struct FriendApplicationListView: View {
             
             ScrollView {
                 VStack(spacing: 0) {
-                    ForEach(friendApplicationList, id: \.applicationID) { application in
+                    ForEach(friendApplicationList, id: \.userID) { application in
                         FriendApplicationCell(
                             application: application,
                             onAccept: {
-                                contactStore.acceptFriendApplication(info: application) { result in
+                                ContactStore.shared.acceptFriendApplication(info: application) { result in
                                     DispatchQueue.main.async {
                                         switch result {
                                         case .success:
@@ -530,7 +516,7 @@ public struct FriendApplicationListView: View {
                                 }
                             },
                             onRefuse: {
-                                contactStore.refuseFriendApplication(info: application) { result in
+                                ContactStore.shared.refuseFriendApplication(info: application) { result in
                                     DispatchQueue.main.async {
                                         switch result {
                                         case .success:
@@ -548,10 +534,10 @@ public struct FriendApplicationListView: View {
         }
         .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .onAppear {
-            contactStore.fetchFriendApplicationList(completion: nil)
-            contactStore.clearFriendApplicationUnreadCount(completion: nil)
+            ContactStore.shared.loadFriendApplications(completion: nil)
+            ContactStore.shared.clearFriendApplicationUnreadCount(completion: nil)
         }
-        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.friendApplicationList))) { friendApplicationList in
+        .onReceive(ContactStore.shared.state.subscribe(StatePublisherSelector(keyPath: \ContactState.friendApplicationList))) { friendApplicationList in
             self.friendApplicationList = friendApplicationList
         }
     }
@@ -562,14 +548,11 @@ public struct FriendApplicationListView: View {
 public struct GroupApplicationListView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var groupApplicationList: [GroupApplicationInfo] = []
-    private var contactStore: ContactListStore
     private let onDismiss: (() -> Void)?
 
     public init(
-        contactStore: ContactListStore,
         onDismiss: (() -> Void)? = nil
     ) {
-        self.contactStore = contactStore
         self.onDismiss = onDismiss
     }
 
@@ -586,7 +569,7 @@ public struct GroupApplicationListView: View {
                         GroupApplicationCell(
                             application: application,
                             onAccept: {
-                                contactStore.acceptGroupApplication(info: application) { result in
+                                GroupStore.shared.acceptApplication(info: application) { result in
                                     DispatchQueue.main.async {
                                         switch result {
                                         case .success:
@@ -598,7 +581,7 @@ public struct GroupApplicationListView: View {
                                 }
                             },
                             onRefuse: {
-                                contactStore.refuseGroupApplication(info: application) { result in
+                                GroupStore.shared.refuseApplication(info: application) { result in
                                     DispatchQueue.main.async {
                                         switch result {
                                         case .success:
@@ -616,13 +599,37 @@ public struct GroupApplicationListView: View {
         }
         .background(themeState.colors.bgColorOperate.ignoresSafeArea())
         .onAppear {
-            contactStore.fetchGroupApplicationList(completion: nil)
-            contactStore.clearGroupApplicationUnreadCount(completion: nil)
+            GroupStore.shared.loadApplications(completion: nil)
+            GroupStore.shared.clearApplicationUnreadCount(completion: nil)
         }
-        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.groupApplicationList))) { groupApplicationList in
+        .onReceive(GroupStore.shared.state.subscribe(StatePublisherSelector(keyPath: \GroupState.applicationList))) { groupApplicationList in
             self.groupApplicationList = groupApplicationList
         }
     }
+}
+
+private func contactDisplayName(_ contact: ContactInfo) -> String {
+    if let remark = contact.friendRemark, !remark.isEmpty {
+        return remark
+    }
+    if let nickname = contact.nickname, !nickname.isEmpty {
+        return nickname
+    }
+    return contact.userID
+}
+
+private func groupDisplayName(_ group: GroupInfo) -> String {
+    if let groupName = group.groupName, !groupName.isEmpty {
+        return groupName
+    }
+    return group.groupID
+}
+
+private func friendApplicationDisplayName(_ application: FriendApplicationInfo) -> String {
+    if let title = application.title, !title.isEmpty {
+        return title
+    }
+    return application.userID
 }
 
 struct NavigationTitleModifier: ViewModifier {

@@ -12,6 +12,7 @@ struct ContentView: View {
     @StateObject private var themeState = ThemeState.shared
     @StateObject private var appStyleSettings = AppStyleSettings()
     @StateObject private var languageState = LanguageState()
+    @StateObject private var pushNavigationManager = PushNavigationManager.shared
     @State private var currentPage: RootPage = .login
     @State private var cancellables = Set<AnyCancellable>()
 
@@ -31,6 +32,7 @@ struct ContentView: View {
         .environmentObject(themeState)
         .environmentObject(appStyleSettings)
         .environmentObject(languageState)
+        .environmentObject(pushNavigationManager)
         .preferredColorScheme(getPreferredColorScheme())
         .environment(\.layoutDirection, getLayoutDirection())
         .onAppear {

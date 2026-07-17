@@ -3,8 +3,8 @@ import Foundation
 import zlib
 
 public class GenerateTestUserSig {
-    public static let sdkAppID: Int = <#Your SDK AppID#>
-    public static let secretKey: String = "<#Your Secret Key#>"
+    public static let sdkAppID: Int = 0
+    public static let secretKey: String = ""
 
     public class func genTestUserSig(identifier: String) -> String {
         return genTestUserSig(userID: identifier, sdkAppID: sdkAppID, secretKey: secretKey)
@@ -35,13 +35,11 @@ public class GenerateTestUserSig {
                 stringToSign += "\(key):\(value)\n"
             }
         }
-        print("string to sign: \(stringToSign)")
         guard var sig = hmac(plainText: stringToSign, secretKey: secretKey) else {
             print("hmac error: \(stringToSign)")
             return ""
         }
         obj["TLS.sig"] = sig
-        print("sig: \(String(describing: sig))")
         guard let jsonData = try? JSONSerialization.data(withJSONObject: obj, options: .sortedKeys) else {
             print("jsonData error: \(obj)")
             return ""
@@ -67,17 +65,13 @@ public class GenerateTestUserSig {
 
     class func hmac(plainText: String, secretKey: String) -> String? {
         guard let cKey = secretKey.cString(using: String.Encoding.ascii) else {
-            print("hmac secretKey error: \(secretKey)")
+            print("hmac secretKey error")
             return nil
         }
-        print("hmac secretKey: \(secretKey)")
-        print("hmac cKey: \(cKey)")
         guard let cData = plainText.cString(using: String.Encoding.ascii) else {
             print("hmac plainText error: \(plainText)")
             return nil
         }
-        print("hmac plainText: \(plainText)")
-        print("hmac cData: \(cData)")
         let cKeyLen = secretKey.lengthOfBytes(using: .ascii)
         let cDataLen = plainText.lengthOfBytes(using: .ascii)
         var cHMAC = [CUnsignedChar](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
@@ -90,8 +84,6 @@ public class GenerateTestUserSig {
             return nil
         }
         let data = Data(bytes: adress, count: cHMAC.count)
-        print("cHMAC.count: \(String(describing: cHMAC.count))")
-        print("data: \(String(describing: data))")
         let result = data.base64EncodedString(options: [])
         return result
     }

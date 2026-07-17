@@ -43,11 +43,8 @@ public struct AddFriendView: View {
     @State private var isSearching = false
     @State private var showFriendDetail = false
     @State private var addFriendInfo: ContactInfo?
-    private let contactStore: ContactListStore
 
-    public init(contactStore: ContactListStore = ContactListStore.create()) {
-        self.contactStore = contactStore
-    }
+    public init() {}
 
     public var body: some View {
         NavigationView {
@@ -102,16 +99,15 @@ public struct AddFriendView: View {
                 }
                 .foregroundColor(themeState.colors.textColorLink)
             )
-    }
-    .background(
-        themeState.colors.bgColorOperate
-            .ignoresSafeArea()
-    )
-    .sheet(isPresented: $showFriendDetail) {
+        }
+        .background(
+            themeState.colors.bgColorOperate
+                .ignoresSafeArea()
+        )
+        .sheet(isPresented: $showFriendDetail) {
             if let userInfo = addFriendInfo {
                 AddFriendDetailView(
                     userInfo: userInfo,
-                    contactStore: contactStore,
                     dismissAll: {
                         showFriendDetail = false
                         presentationMode.wrappedValue.dismiss()
@@ -120,10 +116,7 @@ public struct AddFriendView: View {
             }
         }
         .onAppear {
-            contactStore.fetchFriendList(completion: nil)
-        }
-        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.addFriendInfo))) { addFriendInfo in
-            self.addFriendInfo = addFriendInfo
+            ContactStore.shared.loadFriends(completion: nil)
         }
     }
 
@@ -131,14 +124,23 @@ public struct AddFriendView: View {
         guard !searchText.isEmpty else { return }
         isSearching = true
         addFriendInfo = nil
-        contactStore.fetchUserInfo(userID: searchText, completion: { result in
-            switch result {
-            case .success:
-                isSearching = false
-            case .failure:
-                isSearching = false
-            }
-        })
+        ContactStore.shared.getContactInfo(
+            userIDList: [searchText],
+            completion: ContactInfoLookupHandler(
+                onSuccess: { contactInfoList in
+                    DispatchQueue.main.async {
+                        self.addFriendInfo = contactInfoList.first
+                        self.isSearching = false
+                    }
+                },
+                onFailure: { _, _ in
+                    DispatchQueue.main.async {
+                        self.addFriendInfo = nil
+                        self.isSearching = false
+                    }
+                }
+            )
+        )
     }
 }
 
@@ -156,16 +158,16 @@ struct AddFriendResultCell: View {
                     // Avatar
                     Avatar(
                         url: userInfo.avatarURL,
-                        name: userInfo.title ?? userInfo.contactID,
+                        name: contactDisplayName(userInfo),
                         size: .l
                     )
                     VStack(alignment: .leading, spacing: 4) {
                         // User name
-                        Text(userInfo.title ?? userInfo.contactID)
+                        Text(contactDisplayName(userInfo))
                             .font(.body)
                             .foregroundColor(themeState.colors.textColorPrimary)
                         // User ID
-                        Text("\(LocalizedChatString("Identity")): \(userInfo.contactID)")
+                        Text("\(LocalizedChatString("Identity")): \(userInfo.userID)")
                             .font(.caption)
                             .foregroundColor(themeState.colors.textColorSecondary)
                     }
@@ -187,12 +189,9 @@ public struct JoinGroupView: View {
     @State private var searchText = ""
     @State private var isSearching = false
     @State private var showGroupDetail = false
-    @State private var joinGroupInfo: ContactInfo?
-    private let contactStore: ContactListStore
+    @State private var joinGroupInfo: GroupInfo?
 
-    public init(contactStore: ContactListStore = ContactListStore.create()) {
-        self.contactStore = contactStore
-    }
+    public init() {}
 
     public var body: some View {
         NavigationView {
@@ -256,7 +255,6 @@ public struct JoinGroupView: View {
             if let groupInfo = joinGroupInfo {
                 JoinGroupDetailView(
                     groupInfo: groupInfo,
-                    contactStore: contactStore,
                     dismissAll: {
                         showGroupDetail = false
                         presentationMode.wrappedValue.dismiss()
@@ -265,10 +263,7 @@ public struct JoinGroupView: View {
             }
         }
         .onAppear {
-            contactStore.fetchFriendList(completion: nil)
-        }
-        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.joinGroupInfo))) { joinGroupInfo in
-            self.joinGroupInfo = joinGroupInfo
+            GroupStore.shared.loadJoinedGroups(completion: nil)
         }
     }
 
@@ -276,20 +271,29 @@ public struct JoinGroupView: View {
         guard !searchText.isEmpty else { return }
         isSearching = true
         joinGroupInfo = nil
-        contactStore.fetchGroupInfo(groupID: searchText, completion: { result in
-            switch result {
-            case .success:
-                isSearching = false
-            case .failure(let error):
-                isSearching = false
-            }
-        })
+        GroupStore.shared.getGroupInfo(
+            groupID: searchText,
+            completion: GroupInfoLookupHandler(
+                onSuccess: { groupInfo in
+                    DispatchQueue.main.async {
+                        self.joinGroupInfo = groupInfo
+                        self.isSearching = false
+                    }
+                },
+                onFailure: { _, _ in
+                    DispatchQueue.main.async {
+                        self.joinGroupInfo = nil
+                        self.isSearching = false
+                    }
+                }
+            )
+        )
     }
 }
 
 struct JoinGroupResultCell: View {
     @EnvironmentObject var themeState: ThemeState
-    let groupInfo: ContactInfo
+    let groupInfo: GroupInfo
     let onTap: () -> Void
 
     var body: some View {
@@ -299,16 +303,16 @@ struct JoinGroupResultCell: View {
                     // Avatar
                     Avatar(
                         url: groupInfo.avatarURL,
-                        name: groupInfo.title ?? groupInfo.contactID,
+                        name: groupDisplayName(groupInfo),
                         size: .l
                     )
                     VStack(alignment: .leading, spacing: 4) {
                         // Group name
-                        Text(groupInfo.title ?? groupInfo.contactID)
+                        Text(groupDisplayName(groupInfo))
                             .font(.body)
                             .foregroundColor(themeState.colors.textColorPrimary)
                         // Group ID
-                        Text("\(LocalizedChatString("Identity")): \(groupInfo.contactID)")
+                        Text("\(LocalizedChatString("Identity")): \(groupInfo.groupID)")
                             .font(.caption)
                             .foregroundColor(themeState.colors.textColorSecondary)
                     }
@@ -331,13 +335,11 @@ struct AddFriendDetailView: View {
     @State private var verificationMessage = ""
     @State private var friendRemark = ""
     @State private var isAddingFriend = false
-    var contactStore: ContactListStore
     let userInfo: ContactInfo
     let dismissAll: () -> Void
 
-    public init(userInfo: ContactInfo, contactStore: ContactListStore, dismissAll: @escaping () -> Void) {
+    public init(userInfo: ContactInfo, dismissAll: @escaping () -> Void) {
         self.userInfo = userInfo
-        self.contactStore = contactStore
         self.dismissAll = dismissAll
     }
 
@@ -347,14 +349,14 @@ struct AddFriendDetailView: View {
                 HStack(spacing: 15) {
                     Avatar(
                         url: userInfo.avatarURL,
-                        name: userInfo.title ?? userInfo.contactID,
+                        name: contactDisplayName(userInfo),
                         size: .xl
                     )
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(userInfo.title ?? userInfo.contactID)
+                        Text(contactDisplayName(userInfo))
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(themeState.colors.textColorPrimary)
-                        Text("\(LocalizedChatString("Identity"))：\(userInfo.contactID)")
+                        Text("\(LocalizedChatString("Identity"))：\(userInfo.userID)")
                             .font(.system(size: 12))
                             .foregroundColor(themeState.colors.textColorSecondary)
                     }
@@ -425,12 +427,12 @@ struct AddFriendDetailView: View {
 
     private func sendFriendRequest() {
         isAddingFriend = true
-        if userInfo.isContact {
+        if userInfo.isFriend {
             isAddingFriend = false
             WindowToastManager.shared.show(LocalizedChatString("AlreadyFriend"), type: .error, duration: 3)
             return
         }
-        contactStore.addFriend(userID: userInfo.contactID, remark: friendRemark.isEmpty ? nil : friendRemark, addWording: verificationMessage, completion: { result in
+        ContactStore.shared.addFriend(userID: userInfo.userID, remark: friendRemark.isEmpty ? nil : friendRemark, addWording: verificationMessage, completion: { result in
             switch result {
             case .success:
                 isAddingFriend = false
@@ -461,13 +463,11 @@ public struct JoinGroupDetailView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var verificationMessage = LocalizedChatString("ApplyJoinGroup")
     @State private var isJoiningGroup = false
-    var contactStore: ContactListStore
-    let groupInfo: ContactInfo
+    let groupInfo: GroupInfo
     let dismissAll: () -> Void
 
-    public init(groupInfo: ContactInfo, contactStore: ContactListStore, dismissAll: @escaping () -> Void) {
+    public init(groupInfo: GroupInfo, dismissAll: @escaping () -> Void) {
         self.groupInfo = groupInfo
-        self.contactStore = contactStore
         self.dismissAll = dismissAll
     }
 
@@ -477,17 +477,17 @@ public struct JoinGroupDetailView: View {
                 HStack(spacing: 15) {
                     Avatar(
                         url: groupInfo.avatarURL,
-                        name: groupInfo.title ?? groupInfo.contactID,
+                        name: groupDisplayName(groupInfo),
                         size: .xl
                     )
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(groupInfo.title ?? groupInfo.contactID)
+                        Text(groupDisplayName(groupInfo))
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(themeState.colors.textColorPrimary)
-                        Text("\(LocalizedChatString("GroupID"))：\(groupInfo.contactID)")
+                        Text("\(LocalizedChatString("GroupID"))：\(groupInfo.groupID)")
                             .font(.system(size: 12))
                             .foregroundColor(themeState.colors.textColorPrimary)
-                        Text("\(LocalizedChatString("GroupType"))：\(LocalizedChatString("NormalGroup"))")
+                        Text("\(LocalizedChatString("GroupType"))：\(groupInfo.groupType?.rawValue ?? LocalizedChatString("NormalGroup"))")
                             .font(.system(size: 12))
                             .foregroundColor(themeState.colors.textColorPrimary)
                     }
@@ -547,13 +547,13 @@ public struct JoinGroupDetailView: View {
     private func joinGroup() {
         isJoiningGroup = true
 
-        if groupInfo.isInGroup {
+        if GroupStore.shared.state.value.joinedGroupList.contains(where: { $0.groupID == groupInfo.groupID }) {
             isJoiningGroup = false
             WindowToastManager.shared.show(LocalizedChatString("AlreadyGroupMember"), type: .error, duration: 3)
             return
         }
-        contactStore.joinGroup(
-            groupID: groupInfo.contactID,
+        GroupStore.shared.joinGroup(
+            groupID: groupInfo.groupID,
             message: verificationMessage,
             completion: { result in
                 switch result {
@@ -581,5 +581,58 @@ public struct JoinGroupDetailView: View {
                 }
             }
         )
+    }
+}
+
+private func contactDisplayName(_ contact: ContactInfo) -> String {
+    if let remark = contact.friendRemark, !remark.isEmpty {
+        return remark
+    }
+    if let nickname = contact.nickname, !nickname.isEmpty {
+        return nickname
+    }
+    return contact.userID
+}
+
+private func groupDisplayName(_ group: GroupInfo) -> String {
+    if let groupName = group.groupName, !groupName.isEmpty {
+        return groupName
+    }
+    return group.groupID
+}
+
+private final class ContactInfoLookupHandler: GetContactInfoCompletionHandler {
+    private let onSuccessBlock: ([ContactInfo]) -> Void
+    private let onFailureBlock: (Int, String) -> Void
+
+    init(onSuccess: @escaping ([ContactInfo]) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessBlock = onSuccess
+        self.onFailureBlock = onFailure
+    }
+
+    func onSuccess(contactInfoList: [ContactInfo]) {
+        onSuccessBlock(contactInfoList)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureBlock(code, desc)
+    }
+}
+
+private final class GroupInfoLookupHandler: GetGroupInfoCompletionHandler {
+    private let onSuccessBlock: (GroupInfo) -> Void
+    private let onFailureBlock: (Int, String) -> Void
+
+    init(onSuccess: @escaping (GroupInfo) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessBlock = onSuccess
+        self.onFailureBlock = onFailure
+    }
+
+    func onSuccess(groupInfo: GroupInfo) {
+        onSuccessBlock(groupInfo)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureBlock(code, desc)
     }
 }

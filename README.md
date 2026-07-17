@@ -36,7 +36,34 @@ This document introduces **how to quickly run the TUIKit SwiftUI demo.**
 > In this document, the method to obtain UserSig is to configure a SECRETKEY in the client code. In this method, the SECRETKEY is vulnerable to decompilation and reverse engineering. Once your SECRETKEY is leaked, attackers can steal your Tencent Cloud traffic. Therefore, **this method is only suitable for locally running a demo project and feature debugging**.
 > The correct `UserSig` distribution method is to integrate the calculation code of `UserSig` into your server and provide an application-oriented API. When `UserSig` is needed, your app can send a request to the business server for a dynamic `UserSig`. For more information, please see [How do I calculate UserSig on the server?](https://trtc.io/document/34385?product=chat&menulabel=serverapis).
 
-### Step 4: Compile and Run the Demo
+### Step 4: Configure Push Signing
+
+This demo includes the TIMPush notification service extension. The repository uses template signing values, so you must replace them with your own Apple Developer configuration before testing offline push on a real device.
+
+1. In Apple Developer, create or select the App ID for the main app and the notification service extension.
+2. Enable **Push Notifications** and **App Groups** for both identifiers.
+3. Create an App Group, for example `group.yourcompany.ChatDemo`, and add both identifiers to it.
+4. In Xcode, replace the template bundle identifiers:
+
+- `com.example.ChatDemo`: main app bundle identifier.
+- `com.example.ChatDemo.pushservice`: notification service extension bundle identifier.
+
+5. In Xcode **Signing & Capabilities**, select your Apple Developer Team for both the `ChatDemo` and `pushservice` targets.
+6. Replace `group.com.example.ChatDemo` in all entitlement files with your App Group:
+
+- `chat/demo/ChatDemo/ChatDemo-Debug.entitlements`
+- `chat/demo/ChatDemo/ChatDemo-Release.entitlements`
+- `chat/demo/ChatDemo/ChatDemo-AppStore.entitlements`
+- `chat/demo/pushservice/pushserviceDebug.entitlements`
+- `chat/demo/pushservice/pushserviceRelease.entitlements`
+- `chat/demo/pushservice/pushserviceAppStore.entitlements`
+
+7. Update `chat/demo/ChatDemo/Constants.swift`:
+
+- `kAPNSBusiId`: set it to the APNs certificate BusinessID from the Chat Console.
+- `kTIMPushAppGroupKey`: set it to the same App Group used in the entitlement files.
+
+### Step 5: Compile and Run the Demo
 1. Run the following command on the terminal to check the pod version:
 ```objectivec
 pod --version

@@ -39,15 +39,23 @@ struct AudioMessageView: View {
     @State private var isConverting: Bool = false
     @State private var isAsrExpanded: Bool = false
     @State private var asrBubbleFrame: CGRect = .zero
-    let messageBody: MessageBody
+    let payload: AudioMessagePayload
     let message: MessageInfo
     let messageListStore: MessageListStore
     let isLeft: Bool
     let isSelf: Bool
     let shouldHighlight: Bool
+
+    private var currentAudioPayload: AudioMessagePayload? {
+        if let updatedMessage = messageListStore.state.value.messageList.first(where: { $0.msgID == message.msgID }),
+           case .audio(let payload) = updatedMessage.messagePayload {
+            return payload
+        }
+        return nil
+    }
     
-    init(messageBody: MessageBody, message: MessageInfo, messageListStore: MessageListStore, isLeft: Bool, isSelf: Bool, shouldHighlight: Bool, audioPlayer: AudioPlayer, audioPlaybackManager: AudioPlaybackManager) {
-        self.messageBody = messageBody
+    init(payload: AudioMessagePayload, message: MessageInfo, messageListStore: MessageListStore, isLeft: Bool, isSelf: Bool, shouldHighlight: Bool, audioPlayer: AudioPlayer, audioPlaybackManager: AudioPlaybackManager) {
+        self.payload = payload
         self.message = message
         self.messageListStore = messageListStore
         self.isLeft = isLeft
@@ -62,12 +70,12 @@ struct AudioMessageView: View {
     private var shouldShowAsrBubble: Bool {
         if isConverting { return true }
         if !isAsrExpanded { return false }
-        let asrText = messageBody.asrText ?? ""
+        let asrText = currentAudioPayload?.asrText ?? payload.asrText ?? ""
         return !asrText.isEmpty
     }
 
     var body: some View {
-        let duration = messageBody.soundDuration
+        let duration = payload.audioDuration
         let isCurrentlyPlaying: Bool = {
             guard audioPlayer.isPlaying else {
                 return false
@@ -139,26 +147,7 @@ struct AudioMessageView: View {
                     audioPlayer.pause()
                     stopTimer()
                 } else {
-                    if messageBody.soundPath == nil || !FileManager.default.fileExists(atPath: messageBody.soundPath!) {
-                        messageListStore.downloadMessageResource(message, resourceType: .sound, completion: { result in
-                            switch result {
-                            case .success:
-                                DispatchQueue.main.async {
-                                    if let soundPath = messageBody.soundPath {
-                                        let url = URL(fileURLWithPath: soundPath)
-                                        self.startPlayback(url: url, msgID: message.msgID)
-                                    }
-                                }
-                            case .failure(let error):
-                                break
-                            }
-                        })
-                    } else {
-                        if let soundPath = messageBody.soundPath {
-                            let url = URL(fileURLWithPath: soundPath)
-                            startPlayback(url: url, msgID: message.msgID)
-                        }
-                    }
+                    handlePlayTap()
                 }
             }
             HStack(spacing: 2) {
@@ -192,7 +181,7 @@ struct AudioMessageView: View {
 
     @ViewBuilder
     private var asrTextBubbleView: some View {
-        let asrText = messageBody.asrText ?? ""
+        let asrText = currentAudioPayload?.asrText ?? payload.asrText ?? ""
         
         Group {
             if isConverting {
@@ -239,14 +228,6 @@ struct AudioMessageView: View {
     private func showAsrTextMenu(asrText: String) {
         let actions = [
             AuxiliaryTextMenuAction(
-                iconName: "message_hide",
-                systemIconFallback: "eye.slash",
-                label: LocalizedChatString("Hide")
-            ) {
-                isAsrExpanded = false
-                asrDisplayManager.collapse(message.msgID)
-            },
-            AuxiliaryTextMenuAction(
                 iconName: "message_forward",
                 systemIconFallback: "arrowshape.turn.up.right",
                 label: LocalizedChatString("Forward")
@@ -285,7 +266,12 @@ struct AudioMessageView: View {
                     // Check if asrText is empty from the latest state
                     let messageList = self.messageListStore.state.value.messageList
                     let updatedMessage = messageList.first { $0.msgID == self.message.msgID }
-                    let asrText = updatedMessage?.messageBody?.asrText ?? ""
+                    let asrText: String
+                    if case .audio(let payload) = updatedMessage?.messagePayload {
+                        asrText = payload.asrText ?? ""
+                    } else {
+                        asrText = ""
+                    }
                     
                     if asrText.isEmpty {
                         // Voice message has no content
@@ -298,7 +284,7 @@ struct AudioMessageView: View {
                         NotificationCenter.default.post(
                             name: NSNotification.Name("asrTextConversionCompleted"),
                             object: nil,
-                            userInfo: ["msgID": self.message.msgID ?? ""]
+                            userInfo: ["msgID": self.message.msgID]
                         )
                     }
                 case .failure(let error):
@@ -312,7 +298,7 @@ struct AudioMessageView: View {
     // MARK: - Forward ASR Text
 
     private func forwardAsrText() {
-        let asrText = messageBody.asrText ?? ""
+        let asrText = currentAudioPayload?.asrText ?? payload.asrText ?? ""
         guard !asrText.isEmpty else { return }
         NotificationCenter.default.post(
             name: NSNotification.Name("forwardAsrText"),
@@ -327,6 +313,46 @@ struct AudioMessageView: View {
         return String(format: "%02d:%02d", minutes, remainingSeconds)
     }
     
+    /// Resolve a playable audio source: prefer a local file, otherwise stream from the
+    /// remote URL (filled by `MessageActionStoreImpl.fillMediaURLsForMergedMessages` for
+    /// merged sub-messages). If neither is available, trigger a download and play on success.
+    private func handlePlayTap() {
+        if let path = currentAudioPayload?.audioPath ?? payload.audioPath,
+           !path.isEmpty,
+           FileManager.default.fileExists(atPath: path)
+        {
+            startPlayback(url: URL(fileURLWithPath: path), msgID: message.msgID)
+            return
+        }
+        if let urlString = currentAudioPayload?.audioURL ?? payload.audioURL,
+           !urlString.isEmpty,
+           let url = URL(string: urlString)
+        {
+            startPlayback(url: url, msgID: message.msgID)
+            return
+        }
+        MessageActionStore.create(message: message).downloadMedia(quality: nil) { result in
+            switch result {
+            case .success:
+                DispatchQueue.main.async {
+                    if let path = self.currentAudioPayload?.audioPath ?? self.payload.audioPath,
+                       !path.isEmpty,
+                       FileManager.default.fileExists(atPath: path)
+                    {
+                        self.startPlayback(url: URL(fileURLWithPath: path), msgID: self.message.msgID)
+                    } else if let urlString = self.currentAudioPayload?.audioURL ?? self.payload.audioURL,
+                              !urlString.isEmpty,
+                              let url = URL(string: urlString)
+                    {
+                        self.startPlayback(url: url, msgID: self.message.msgID)
+                    }
+                }
+            case .failure:
+                break
+            }
+        }
+    }
+
     private func startPlayback(url: URL, msgID: String?) {
         print("AudioMessageView: Starting playback for \(url.lastPathComponent)")
         currentPlayTime = 0
@@ -341,7 +367,7 @@ struct AudioMessageView: View {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
             if audioPlayer.isPlaying {
                 currentPlayTime += 0.1
-                if Int(currentPlayTime) >= messageBody.soundDuration {
+                if Int(currentPlayTime) >= payload.audioDuration {
                     print("AudioMessageView: Playback completed")
                     stopTimer()
                 }

@@ -1,6 +1,16 @@
 import AtomicXCore
 import SwiftUI
 
+extension ConversationInfo {
+    // Meeting groups carry an SDK-default do-not-disturb flag that the user did not explicitly
+    // opt into, so we keep the mute indicator out of the conversation list for them. This
+    // matches the Android and Flutter behavior.
+    var shouldShowDoNotDisturbIndicator: Bool {
+        guard receiveOption == .notNotify else { return false }
+        return groupType != .meeting
+    }
+}
+
 public struct ConversationCustomAction {
     public let title: String
     public let action: (ConversationInfo) -> Void
@@ -46,13 +56,13 @@ public struct ConversationList: View {
                     .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                         if config.isSupportMarkUnread {
                             Button {
-                                if conversation.unreadCount > 0 || conversation.markList.contains(.unread) {
+                                if conversation.unreadCount > 0 || conversation.conversationMarkList.contains(.unread) {
                                     markConversationAsRead(conversation)
                                 } else {
                                     markConversationAsUnread(conversation)
                                 }
                             } label: {
-                                if conversation.unreadCount > 0 || conversation.markList.contains(.unread) {
+                                if conversation.unreadCount > 0 || conversation.conversationMarkList.contains(.unread) {
                                     Text(LocalizedChatString("MarkAsRead"))
                                 } else {
                                     Text(LocalizedChatString("MarkAsUnRead"))
@@ -111,7 +121,7 @@ public struct ConversationList: View {
         .frame(height: 70)
         .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
         .listRowBackground(conversationBackgroundColor(for: conversation))
-        .id(conversation.conversationID)
+        .id("\(conversation.conversationID)-\(conversation.isPinned)")
     }
 
     @ViewBuilder
@@ -128,7 +138,7 @@ public struct ConversationList: View {
     @ViewBuilder
     private func buildContextMenuActions(for conversation: ConversationInfo) -> some View {
         if config.isSupportMarkUnread {
-            if conversation.unreadCount > 0 || conversation.markList.contains(.unread) {
+            if conversation.unreadCount > 0 || conversation.conversationMarkList.contains(.unread) {
                 Button(action: {
                     markConversationAsRead(conversation)
                 }) {
@@ -190,8 +200,8 @@ public struct ConversationList: View {
     }
 
     private func loadConversations() {
-        let option = ConversationFetchOption()
-        store.fetchConversationList(option, completion: { _ in
+        let option = ConversationLoadOption()
+        store.loadConversations(option: option, completion: { _ in
             DispatchQueue.main.async {
                 self.isRefreshing = false
             }
@@ -199,19 +209,19 @@ public struct ConversationList: View {
     }
 
     private func deleteConversation(_ conversation: ConversationInfo) {
-        store.deleteConversation(conversation.conversationID, completion: nil)
+        store.deleteConversation(conversationID: conversation.conversationID, completion: nil)
     }
 
     private func pinConversation(_ conversation: ConversationInfo) {
-        store.pinConversation(conversation.conversationID, pin: true, completion: nil)
+        store.pinConversation(conversationID: conversation.conversationID, pin: true, completion: nil)
     }
 
     private func unpinConversation(_ conversation: ConversationInfo) {
-        store.pinConversation(conversation.conversationID, pin: false, completion: nil)
+        store.pinConversation(conversationID: conversation.conversationID, pin: false, completion: nil)
     }
 
     private func clearConversationMessages(_ conversation: ConversationInfo) {
-        store.clearConversationMessages(conversation.conversationID, completion: nil)
+        store.clearConversationMessages(conversationID: conversation.conversationID, completion: nil)
     }
 
     private func conversationBackgroundColor(for conversation: ConversationInfo) -> Color {
@@ -219,17 +229,17 @@ public struct ConversationList: View {
     }
 
     private func clearConversationUnreadCount(_ conversation: ConversationInfo) {
-        store.clearConversationUnreadCount(conversation.conversationID, completion: nil)
-        store.markConversation([conversation.conversationID], markType: .unread, enable: false, completion: nil)
+        store.clearConversationUnreadCount(conversationID: conversation.conversationID, completion: nil)
+        store.markConversation(conversationIDList: [conversation.conversationID], markType: .unread, enable: false, completion: nil)
     }
 
     private func markConversationAsRead(_ conversation: ConversationInfo) {
-        store.clearConversationUnreadCount(conversation.conversationID, completion: nil)
-        store.markConversation([conversation.conversationID], markType: .unread, enable: false, completion: nil)
+        store.clearConversationUnreadCount(conversationID: conversation.conversationID, completion: nil)
+        store.markConversation(conversationIDList: [conversation.conversationID], markType: .unread, enable: false, completion: nil)
     }
 
     private func markConversationAsUnread(_ conversation: ConversationInfo) {
-        store.markConversation([conversation.conversationID], markType: .unread, enable: true, completion: nil)
+        store.markConversation(conversationIDList: [conversation.conversationID], markType: .unread, enable: true, completion: nil)
     }
 }
 
@@ -247,7 +257,7 @@ private struct ConversationCell: View {
                     name: conversation.title,
                     size: .m
                 )
-                if conversation.receiveOption == .notNotify && (conversation.unreadCount > 0 || conversation.markList.contains(.unread)) {
+                if conversation.shouldShowDoNotDisturbIndicator && (conversation.unreadCount > 0 || conversation.conversationMarkList.contains(.unread)) {
                     Circle()
                         .fill(themeState.colors.textColorError)
                         .frame(width: 8, height: 8)
@@ -258,12 +268,12 @@ private struct ConversationCell: View {
                 HStack(alignment: .center) {
                     TitleLabel(size: .s, text: conversation.title ?? "")
                     Spacer()
-                    if conversation.receiveOption == .notNotify {
+                    if conversation.shouldShowDoNotDisturbIndicator {
                         Image(systemName: "bell.slash.fill")
                             .font(.system(size: 14))
                             .foregroundColor(themeState.colors.textColorSecondary)
                     } else {
-                        if conversation.unreadCount > 0 || conversation.markList.contains(.unread) {
+                        if conversation.unreadCount > 0 || conversation.conversationMarkList.contains(.unread) {
                             if conversation.unreadCount > 0 {
                                 Badge(text: "\(conversation.unreadCount)", type: .text)
                             } else {
@@ -272,15 +282,17 @@ private struct ConversationCell: View {
                         }
                     }
                 }
-                HStack(alignment: .center) {
+                HStack(alignment: .center, spacing: 4) {
+                    sendStatusIcon(for: conversation.lastMessage?.status)
+
                     let subtitle = MessageListHelper.getMessageAbstract(conversation.lastMessage)
 
                     buildSubtitleView(subtitle: subtitle, conversation: conversation)
 
                     Spacer()
                     HStack(spacing: 4) {
-                        if conversation.timestamp > 0 {
-                            let dateStr = DateHelper.convertDateToYMDStr(Date(timeIntervalSince1970: TimeInterval(conversation.timestamp)))
+                        if let timestamp = conversation.lastMessage?.timestamp, timestamp > 0 {
+                            let dateStr = DateHelper.convertDateToYMDStr(Date(timeIntervalSince1970: TimeInterval(timestamp)))
                             if dateStr.contains("PM") {
                                 Image(systemName: "checkmark")
                                     .font(.system(size: 12))
@@ -293,6 +305,23 @@ private struct ConversationCell: View {
             }
         }
         .padding(.vertical, 11)
+    }
+
+    @ViewBuilder
+    private func sendStatusIcon(for status: MessageStatus?) -> some View {
+        switch status {
+        case .sendFail, .violation:
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundColor(themeState.colors.textColorError)
+        case .sending:
+            ProgressView()
+                .progressViewStyle(CircularProgressViewStyle(tint: themeState.colors.textColorSecondary))
+                .scaleEffect(0.7)
+                .frame(width: 14, height: 14)
+        default:
+            EmptyView()
+        }
     }
 
     @ViewBuilder

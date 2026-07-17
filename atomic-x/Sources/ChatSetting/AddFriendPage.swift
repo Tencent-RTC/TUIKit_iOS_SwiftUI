@@ -1,4 +1,3 @@
-import AtomicX
 import AtomicXCore
 import SwiftUI
 
@@ -12,7 +11,7 @@ public struct AddFriendPage: View {
     private let onSendMessageClick: (() -> Void)?
     private let onAddFriendSuccess: (() -> Void)?
     
-    @State private var contactStore: ContactListStore
+    private let contactStore = ContactStore.shared
     @State private var userInfo: UserProfile?
     @State private var isLoading: Bool = false
     @State private var showingAddFriendSheet: Bool = false
@@ -28,7 +27,6 @@ public struct AddFriendPage: View {
         self.showsOwnNavigation = showsOwnNavigation
         self.onSendMessageClick = onSendMessageClick
         self.onAddFriendSuccess = onAddFriendSuccess
-        self._contactStore = State(initialValue: ContactListStore.create())
     }
     
     public var body: some View {
@@ -126,29 +124,29 @@ public struct AddFriendPage: View {
     
     private func fetchUserInfo() {
         isLoading = true
-        contactStore.fetchUserInfo(userID: userID, completion: { result in
-            DispatchQueue.main.async {
-                self.isLoading = false
-                switch result {
-                case .success:
-                    // Get user info from store state
-                    if let contactInfo = self.contactStore.state.value.addFriendInfo {
+        contactStore.getContactInfo(userIDList: [userID], completion: ContactInfoHandler(
+            onSuccess: { contactInfoList in
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                    if let contactInfo = contactInfoList.first {
                         self.userInfo = UserProfile(
-                            userID: contactInfo.contactID,
-                            nickname: contactInfo.title ?? contactInfo.contactID,
+                            userID: contactInfo.userID,
+                            nickname: contactDisplayName(contactInfo),
                             avatarURL: contactInfo.avatarURL ?? ""
                         )
                     } else {
-                        // Create a basic user profile with userID
                         self.userInfo = UserProfile(userID: userID, nickname: userID, avatarURL: "")
                     }
-                case .failure(let error):
-                    print("Failed to fetch user info: \(error)")
-                    // Create a basic user profile with userID
+                }
+            },
+            onFailure: { _, desc in
+                DispatchQueue.main.async {
+                    self.isLoading = false
+                    print("Failed to fetch user info: \(desc)")
                     self.userInfo = UserProfile(userID: userID, nickname: userID, avatarURL: "")
                 }
             }
-        })
+        ))
     }
     
     private func sendFriendRequest(message: String) {
@@ -251,6 +249,24 @@ private struct AddFriendSheet: View {
     }
 }
 
+private final class ContactInfoHandler: GetContactInfoCompletionHandler {
+    private let onSuccessBlock: ([ContactInfo]) -> Void
+    private let onFailureBlock: (Int, String) -> Void
+
+    init(onSuccess: @escaping ([ContactInfo]) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessBlock = onSuccess
+        self.onFailureBlock = onFailure
+    }
+
+    func onSuccess(contactInfoList: [ContactInfo]) {
+        onSuccessBlock(contactInfoList)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureBlock(code, desc)
+    }
+}
+
 // MARK: - Localized Strings Extension
 
 extension String {
@@ -259,4 +275,14 @@ extension String {
     static let AddFriendMessage = "AddFriendMessage"
     static let AddFriendMessageHint = "AddFriendMessageHint"
     static let FriendRequestSent = "FriendRequestSent"
+}
+
+private func contactDisplayName(_ contact: ContactInfo) -> String {
+    if let remark = contact.friendRemark, !remark.isEmpty {
+        return remark
+    }
+    if let nickname = contact.nickname, !nickname.isEmpty {
+        return nickname
+    }
+    return contact.userID
 }

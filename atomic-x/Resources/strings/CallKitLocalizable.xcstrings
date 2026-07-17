@@ -7,13 +7,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Connect"
+            "value" : "Connected"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已接听"
+            "value" : "已接通"
           }
         }
       }
@@ -166,7 +166,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "扬声器已关"
+            "value" : "听筒"
           }
         }
       }
@@ -177,13 +177,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Waitting"
+            "value" : "Waiting"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "等待"
+            "value" : "等待接听"
           }
         }
       }
@@ -279,7 +279,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Other party's network poor"
+            "value" : "The other party's network is poor"
           }
         },
         "zh-Hans" : {
@@ -330,7 +330,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Your network poor"
+            "value" : "Your network is poor"
           }
         },
         "zh-Hans" : {
@@ -353,7 +353,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "扬声器已开"
+            "value" : "扬声器"
           }
         }
       }
@@ -398,13 +398,13 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "TUICalling currently supports call with up to 9 people.For larger conference calls,try using TUIRoom"
+            "value" : "This call supports a maximum of 9 participants"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "暂支持最多9人通话。如需多人会议，请使用TUIRoom"
+            "value" : "当前通话最多支持 9 人同时在线"
           }
         }
       }

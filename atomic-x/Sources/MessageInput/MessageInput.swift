@@ -897,7 +897,7 @@ private struct MessageInputView: View {
         messageManager.sendTextMessage(text, mentionList: convertedMentionList)
         
         // Clear draft after sending message
-        conversationStore.setConversationDraft(conversationID, draft: nil, completion: nil)
+        conversationStore.setConversationDraft(conversationID: conversationID, draft: nil, completion: nil)
         
         // Clear mention list
         mentionList.removeAll()
@@ -1138,55 +1138,65 @@ private struct MessageInputView: View {
         
         if draftText.isEmpty {
             // Clear draft if input is empty
-            conversationStore.setConversationDraft(conversationID, draft: nil, completion: nil)
+            conversationStore.setConversationDraft(conversationID: conversationID, draft: nil, completion: nil)
         } else {
             // Save draft with emoji codes
-            conversationStore.setConversationDraft(conversationID, draft: draftText, completion: nil)
+            conversationStore.setConversationDraft(conversationID: conversationID, draft: draftText, completion: nil)
         }
     }
     
     private func loadDraft() {
-        conversationStore.fetchConversationInfo(conversationID) { result in
-            switch result {
-            case .success:
-                // Get the conversation info from state
-                DispatchQueue.main.async {
-                    // Access the conversation list state to find our conversation
-                    let conversations = conversationStore.state.value.conversationList
-                    if let conversation = conversations.first(where: { $0.conversationID == conversationID }),
-                       let draft = conversation.draft,
-                       !draft.isEmpty
-                    {
-                        // Set flag to prevent triggering save during load
-                        isLoadingDraft = true
-                        
-                        // Convert emoji codes to AttributedString with images
-                        let draftAttributedString = EmojiManager.shared.createAttributedStringFromEmojiCodes(from: draft)
-                        
-                        // Set the text editor state
-                        textEditorState.displayText = draftAttributedString
-                        
-                        // Auto focus and move cursor to the end after draft is loaded
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            textEditorState.becomeFirstResponder?()
-                            // Move cursor to the end of the text
-                            if let textView = textEditorState.becomeFirstResponder as? (() -> Void) {
-                                // The cursor position will be set in updateUIView
+        conversationStore.getConversationInfo(
+            conversationID: conversationID,
+            completion: DraftConversationInfoHandler(
+                onSuccess: { conversation in
+                    DispatchQueue.main.async {
+                        if let draft = conversation.draft,
+                           !draft.isEmpty
+                        {
+                            // Set flag to prevent triggering save during load
+                            isLoadingDraft = true
+
+                            // Convert emoji codes to AttributedString with images
+                            let draftAttributedString = EmojiManager.shared.createAttributedStringFromEmojiCodes(from: draft)
+
+                            // Set the text editor state
+                            textEditorState.displayText = draftAttributedString
+
+                            // Auto focus and move cursor to the end after draft is loaded
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                textEditorState.becomeFirstResponder?()
+                            }
+
+                            // Reset flag after a short delay to allow UI update
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                isLoadingDraft = false
                             }
                         }
-                        
-                        // Reset flag after a short delay to allow UI update
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                            isLoadingDraft = false
-                        }
-                        
-                        // Update height to accommodate the draft content
-                        // Height will be automatically calculated by the text editor
                     }
+                },
+                onFailure: { _, desc in
+                    print(">>>>> Failed to load draft: \(desc)")
                 }
-            case .failure(let error):
-                print(">>>>> Failed to load draft: \(error.message)")
-            }
-        }
+            )
+        )
+    }
+}
+
+private final class DraftConversationInfoHandler: GetConversationInfoCompletionHandler {
+    private let onSuccessBlock: (ConversationInfo) -> Void
+    private let onFailureBlock: (Int, String) -> Void
+
+    init(onSuccess: @escaping (ConversationInfo) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessBlock = onSuccess
+        self.onFailureBlock = onFailure
+    }
+
+    func onSuccess(conversationInfo: ConversationInfo) {
+        onSuccessBlock(conversationInfo)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureBlock(code, desc)
     }
 }

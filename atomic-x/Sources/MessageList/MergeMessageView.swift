@@ -10,11 +10,17 @@ struct MergeMessageView: View {
     private let bubbleWidth: CGFloat = UIScreen.main.bounds.width * 0.6
     
     private var mergedTitle: String {
-        return message.messageBody?.mergedMessage?.title ?? LocalizedChatString("RelayChatHistory")
+        if case .merged(let payload) = message.messagePayload, !payload.title.isEmpty {
+            return payload.title
+        }
+        return LocalizedChatString("RelayChatHistory")
     }
     
     private var abstractList: [String] {
-        return message.messageBody?.mergedMessage?.abstractList ?? []
+        if case .merged(let payload) = message.messagePayload {
+            return payload.abstractList ?? []
+        }
+        return []
     }
     
     var body: some View {

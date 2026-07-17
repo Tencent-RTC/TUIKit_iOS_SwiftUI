@@ -46,45 +46,21 @@ private struct MediaItemView: View {
     let onDownloadButtonTap: () -> Void
     let onImageTap: () -> Void
 
+    // `imagePath` is overloaded: it may be a local file path (preferred when the SDK has
+    // cached the asset) or a remote HTTP/HTTPS URL (used for merged-message previews where
+    // the sub-message has not been downloaded yet). This mirrors Android's `snapshotPath →
+    // snapshotURL → Glide` strategy.
+    private var isRemoteURL: Bool {
+        element.imagePath.hasPrefix("http://") || element.imagePath.hasPrefix("https://")
+    }
+
     var body: some View {
         ZStack {
-            if let image = UIImage(contentsOfFile: element.imagePath) {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        if element.type == 0 {
-                            onImageTap()
-                        } else if element.type == 1 {
-                            if let videoPath = element.videoPath, !videoPath.isEmpty {
-                                onPlayButtonTap()
-                            } else if !isDownloading {
-                                onDownloadButtonTap()
-                            }
-                        }
-                    }
-            } else {
-                Rectangle()
-                    .fill(Color.gray.opacity(0.3))
-                    .aspectRatio(1, contentMode: .fit)
-                    .overlay(
-                        Image(systemName: element.type == 0 ? "photo" : "video")
-                            .foregroundColor(.gray)
-                            .font(.system(size: 50))
-                    )
-                    .onTapGesture {
-                        if element.type == 0 {
-                            onImageTap()
-                        } else if element.type == 1 {
-                            if let videoPath = element.videoPath, !videoPath.isEmpty {
-                                onPlayButtonTap()
-                            } else if !isDownloading {
-                                onDownloadButtonTap()
-                            }
-                        }
-                    }
-            }
+            mediaView
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    handleMediaTap()
+                }
             if element.type == 1 {
                 PlayButtonView(
                     element: element,
@@ -92,6 +68,48 @@ private struct MediaItemView: View {
                     onPlayTap: onPlayButtonTap,
                     onDownloadTap: onDownloadButtonTap
                 )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var mediaView: some View {
+        if element.imagePath.isEmpty {
+            placeholder
+        } else if isRemoteURL, let url = URL(string: element.imagePath) {
+            CompatibleKFImage(
+                url: url,
+                contentMode: .fit,
+                fallback: { AnyView(placeholder) }
+            )
+        } else if let image = UIImage(contentsOfFile: element.imagePath) {
+            Image(uiImage: image)
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+        } else {
+            placeholder
+        }
+    }
+
+    private var placeholder: some View {
+        Rectangle()
+            .fill(Color.gray.opacity(0.3))
+            .aspectRatio(1, contentMode: .fit)
+            .overlay(
+                Image(systemName: element.type == 0 ? "photo" : "video")
+                    .foregroundColor(.gray)
+                    .font(.system(size: 50))
+            )
+    }
+
+    private func handleMediaTap() {
+        if element.type == 0 {
+            onImageTap()
+        } else if element.type == 1 {
+            if let videoPath = element.videoPath, !videoPath.isEmpty {
+                onPlayButtonTap()
+            } else if !isDownloading {
+                onDownloadButtonTap()
             }
         }
     }
@@ -345,14 +363,12 @@ public struct ImageViewer: View {
             startLoadingTimer()
             onLoadMore?(true) { newElementsData in
                 self.handleLoadMoreResponse(newElementsData: newElementsData, isOlder: true)
-                showNoMoreDataToastIfNeeded()
             }
         } else if newIndex >= (imageElements.count - 1 - preloadThreshold) && isSwipingRight && !isLoadingNewer {
             isLoadingNewer = true
             startLoadingTimer()
             onLoadMore?(false) { newElementsData in
                 self.handleLoadMoreResponse(newElementsData: newElementsData, isOlder: false)
-                showNoMoreDataToastIfNeeded()
             }
         }
     }
@@ -403,19 +419,6 @@ public struct ImageViewer: View {
         loadingTimer = nil
         withAnimation(.easeInOut(duration: 0.3)) {
             showLoadingIndicator = false
-        }
-    }
-
-    private func showNoMoreDataToastIfNeeded() {
-        guard !hasMoreData else { return }
-        toastMessage = LocalizedChatString("MessageReadNoMoreData")
-        withAnimation(.easeInOut(duration: 0.3)) {
-            showToast = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                self.showToast = false
-            }
         }
     }
 

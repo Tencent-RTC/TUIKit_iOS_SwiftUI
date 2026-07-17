@@ -21,6 +21,7 @@ public enum GroupPermission: CaseIterable {
     case getGroupMemberInfo
     case removeGroupMember
     case addGroupMember
+    case muteMember
     case clearHistoryMessages
     case deleteAndQuit
     case transferOwner
@@ -49,6 +50,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: true,
                 .addGroupMember: true,
+                .muteMember: false,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true,
                 .transferOwner: true,
@@ -73,6 +75,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: false,
                 .addGroupMember: true,
+                .muteMember: false,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true,
                 .transferOwner: false,
@@ -97,6 +100,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: false,
                 .addGroupMember: true,
+                .muteMember: false,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true,
                 .transferOwner: false,
@@ -123,6 +127,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: true,
                 .addGroupMember: true,
+                .muteMember: true,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: false, // Owner cannot quit, must transfer ownership first
                 .transferOwner: true,
@@ -147,6 +152,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: true,
                 .addGroupMember: true,
+                .muteMember: true,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true, // Owner cannot quit, must transfer ownership first
                 .transferOwner: false,
@@ -171,6 +177,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: false,
                 .addGroupMember: true,
+                .muteMember: false,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true, // Owner cannot quit, must transfer ownership first
                 .transferOwner: false,
@@ -197,6 +204,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: true,
                 .addGroupMember: true,
+                .muteMember: true,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: false, // Owner cannot quit, must transfer ownership first
                 .transferOwner: true,
@@ -221,6 +229,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: true,
                 .addGroupMember: true,
+                .muteMember: true,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true, // Owner cannot quit, must transfer ownership first
                 .transferOwner: false,
@@ -245,6 +254,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: false,
                 .addGroupMember: true,
+                .muteMember: false,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true, // Owner cannot quit, must transfer ownership first
                 .transferOwner: false,
@@ -271,6 +281,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: true,
                 .addGroupMember: true,
+                .muteMember: true,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: false,
                 .transferOwner: true,
@@ -295,6 +306,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: true,
                 .addGroupMember: true,
+                .muteMember: true,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true,
                 .transferOwner: false,
@@ -319,6 +331,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: true,
                 .removeGroupMember: false,
                 .addGroupMember: true,
+                .muteMember: false,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true,
                 .transferOwner: false,
@@ -345,6 +358,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: false,
                 .removeGroupMember: false,
                 .addGroupMember: false,
+                .muteMember: true,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: false,
                 .transferOwner: false,
@@ -369,6 +383,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: false,
                 .removeGroupMember: false,
                 .addGroupMember: false,
+                .muteMember: false,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true,
                 .transferOwner: false,
@@ -393,6 +408,7 @@ public class GroupPermissionManager {
                 .getGroupMemberInfo: false,
                 .removeGroupMember: false,
                 .addGroupMember: false,
+                .muteMember: false,
                 .clearHistoryMessages: true,
                 .deleteAndQuit: true,
                 .transferOwner: false,

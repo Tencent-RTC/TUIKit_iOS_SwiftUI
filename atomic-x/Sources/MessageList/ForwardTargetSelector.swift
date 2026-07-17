@@ -156,8 +156,8 @@ struct ForwardTargetSelector: View {
     }
     
     private func loadConversations() {
-        let option = ConversationFetchOption()
-        conversationStore.fetchConversationList(option) { result in
+        let option = ConversationLoadOption()
+        conversationStore.loadConversations(option: option) { result in
             switch result {
             case .success:
                 DispatchQueue.main.async {

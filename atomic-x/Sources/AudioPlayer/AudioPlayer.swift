@@ -1,55 +1,51 @@
+import AVFoundation
 import AVKit
+import Combine
 import SwiftUI
 
-public class AudioPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
+public class AudioPlayer: NSObject, ObservableObject {
     @Published public var isPlaying: Bool = false
     @Published public var isPaused: Bool = false
     @Published public var currentPlayingURL: URL? = nil
-    private var audioPlayer: AVAudioPlayer?
+
+    private var player: AVPlayer?
+    private var playerItem: AVPlayerItem?
+    private var endObserver: NSObjectProtocol?
+    private var failedObserver: NSObjectProtocol?
+    private var itemStatusObservation: NSKeyValueObservation?
 
     public static func create() -> AudioPlayer {
         return AudioPlayer()
     }
 
     public func play(_ url: URL) {
-        if isPlaying && currentPlayingURL == url {
-            audioPlayer?.stop()
-            audioPlayer = nil
-            isPlaying = false
-            currentPlayingURL = nil
+        if isPlaying, currentPlayingURL == url {
+            teardownPlayer()
             return
         }
-        if isPlaying {
-            audioPlayer?.stop()
-            audioPlayer = nil
-            isPlaying = false
-            currentPlayingURL = nil
+        if player != nil {
+            teardownPlayer()
         }
         playInternal(url)
     }
 
     public func pause() {
-        guard let player = audioPlayer, isPlaying else { return }
+        guard let player = player, isPlaying else { return }
         player.pause()
         isPlaying = false
         isPaused = true
     }
 
     public func resume() {
-        guard let player = audioPlayer, isPaused else { return }
-        if player.play() {
-            isPlaying = true
-            isPaused = false
-        }
+        guard let player = player, isPaused else { return }
+        player.play()
+        isPlaying = true
+        isPaused = false
     }
 
     public func stop() {
-        guard let player = audioPlayer else { return }
-        player.stop()
-        audioPlayer = nil
-        isPlaying = false
-        isPaused = false
-        currentPlayingURL = nil
+        guard player != nil else { return }
+        teardownPlayer()
     }
 
     public func setAudioOutputDevice() {
@@ -58,59 +54,98 @@ public class AudioPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     }
 
     public func getCurrentPosition() -> Int {
-        guard let player = audioPlayer else { return 0 }
-        return Int(player.currentTime * 1000) // Return milliseconds
+        guard let item = playerItem else { return 0 }
+        let seconds = CMTimeGetSeconds(item.currentTime())
+        guard seconds.isFinite, seconds >= 0 else { return 0 }
+        return Int(seconds * 1000)
     }
 
     public func getDuration() -> Int {
-        guard let player = audioPlayer else { return 0 }
-        return Int(player.duration * 1000) // Return milliseconds
+        guard let item = playerItem else { return 0 }
+        let seconds = CMTimeGetSeconds(item.duration)
+        guard seconds.isFinite, seconds >= 0 else { return 0 }
+        return Int(seconds * 1000)
     }
 
     private func playInternal(_ url: URL) {
+        #if os(iOS)
         do {
-            #if os(iOS)
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
-            #endif
-
-            audioPlayer = try AVAudioPlayer(contentsOf: url)
-            audioPlayer?.delegate = self
-            audioPlayer?.prepareToPlay()
-            if audioPlayer?.play() == true {
-                isPlaying = true
-                isPaused = false
-                currentPlayingURL = url
-            } else {
-                print("Audio playback failed")
-                audioPlayer = nil
-                isPlaying = false
-                isPaused = false
-                currentPlayingURL = nil
-            }
         } catch {
-            print("Audio playback error: \(error.localizedDescription)")
-            audioPlayer = nil
-            isPlaying = false
-            isPaused = false
-            currentPlayingURL = nil
+            print("AudioPlayer: AVAudioSession setup failed: \(error.localizedDescription)")
+            teardownPlayer()
+            return
         }
+        #endif
+
+        let item = AVPlayerItem(url: url)
+        let avPlayer = AVPlayer(playerItem: item)
+        avPlayer.actionAtItemEnd = .pause
+
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] _ in
+            print("AudioPlayer: Playback finished")
+            self?.teardownPlayer()
+        }
+
+        failedObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemFailedToPlayToEndTime,
+            object: item,
+            queue: .main
+        ) { [weak self] notification in
+            let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+            print("AudioPlayer: Item failed to play to end: \(error?.localizedDescription ?? "unknown")")
+            self?.teardownPlayer()
+        }
+
+        itemStatusObservation = item.observe(\.status, options: [.new]) { [weak self] observedItem, _ in
+            guard let self = self else { return }
+            switch observedItem.status {
+            case .failed:
+                print("AudioPlayer: Item status failed: \(observedItem.error?.localizedDescription ?? "unknown")")
+                DispatchQueue.main.async { self.teardownPlayer() }
+            case .readyToPlay, .unknown:
+                break
+            @unknown default:
+                break
+            }
+        }
+
+        playerItem = item
+        player = avPlayer
+        currentPlayingURL = url
+        isPlaying = true
+        isPaused = false
+
+        avPlayer.play()
     }
 
-    public func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        print("Playback finished successfully: \(flag)")
-        audioPlayer?.stop()
-        audioPlayer = nil
+    private func teardownPlayer() {
+        if let observer = endObserver {
+            NotificationCenter.default.removeObserver(observer)
+            endObserver = nil
+        }
+        if let observer = failedObserver {
+            NotificationCenter.default.removeObserver(observer)
+            failedObserver = nil
+        }
+        itemStatusObservation?.invalidate()
+        itemStatusObservation = nil
+
+        player?.pause()
+        player = nil
+        playerItem = nil
+
         isPlaying = false
         isPaused = false
         currentPlayingURL = nil
     }
 
-    public func audioPlayerDecodeErrorDidOccur(_ player: AVAudioPlayer, error: Error?) {
-        print("Audio player decoding error: \(error?.localizedDescription ?? "Unknown error")")
-        audioPlayer = nil
-        isPlaying = false
-        isPaused = false
-        currentPlayingURL = nil
+    deinit {
+        teardownPlayer()
     }
 }

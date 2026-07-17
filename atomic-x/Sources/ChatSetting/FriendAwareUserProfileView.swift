@@ -43,21 +43,40 @@ public struct FriendAwareUserProfileView: View {
     
     private func checkFriendshipStatus() {
         isLoading = true
-        let contactStore = ContactListStore.create()
-        
-        contactStore.fetchUserInfo(userID: userID, completion: { result in
-            DispatchQueue.main.async {
-                switch result {
-                case .success:
-                    // Check the result in the store's state
-                    let contactInfo = contactStore.state.value.addFriendInfo
-                    self.isFriend = contactInfo?.isContact ?? false
-                case .failure:
-                    // If failed to get user info, assume not a friend
-                    self.isFriend = false
+        ContactStore.shared.getContactInfo(
+            userIDList: [userID],
+            completion: ContactInfoHandler(
+                onSuccess: { contactInfoList in
+                    DispatchQueue.main.async {
+                        self.isFriend = contactInfoList.first?.isFriend ?? false
+                        self.isLoading = false
+                    }
+                },
+                onFailure: { _, _ in
+                    DispatchQueue.main.async {
+                        self.isFriend = false
+                        self.isLoading = false
+                    }
                 }
-                self.isLoading = false
-            }
-        })
+            )
+        )
+    }
+}
+
+private final class ContactInfoHandler: GetContactInfoCompletionHandler {
+    private let onSuccessBlock: ([ContactInfo]) -> Void
+    private let onFailureBlock: (Int, String) -> Void
+
+    init(onSuccess: @escaping ([ContactInfo]) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessBlock = onSuccess
+        self.onFailureBlock = onFailure
+    }
+
+    func onSuccess(contactInfoList: [ContactInfo]) {
+        onSuccessBlock(contactInfoList)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureBlock(code, desc)
     }
 }

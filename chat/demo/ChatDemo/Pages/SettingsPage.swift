@@ -629,6 +629,13 @@ struct ProfileDetailView: View {
         return loginManager.currentUserID
     }
 
+    private func getSignatureText() -> String {
+        guard let selfSignature = selfSignature, !selfSignature.isEmpty else {
+            return LocalizedChatString("Unsetted")
+        }
+        return selfSignature
+    }
+
     private func getGenderText() -> String {
         guard let gender = gender else {
             return LocalizedChatString("Unsetted")
@@ -696,6 +703,10 @@ struct ProfileDetailView: View {
                             Text(LocalizedChatString("ProfileSignature"))
                                 .foregroundColor(themeState.colors.textColorPrimary)
                             Spacer()
+                            Text(getSignatureText())
+                                .foregroundColor(themeState.colors.textColorSecondary)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
                             Image(systemName: "chevron.right")
                                 .foregroundColor(themeState.colors.textColorSecondary)
                         }
@@ -827,7 +838,7 @@ struct ProfileDetailView: View {
     }
 
     private func createUserAvatarUrlList() -> [String] {
-        return (1 ... 27).map { index in
+        return (1 ... 26).map { index in
             "https://im.sdk.qcloud.com/download/tuikit-resource/avatar/avatar_\(index).png"
         }
     }

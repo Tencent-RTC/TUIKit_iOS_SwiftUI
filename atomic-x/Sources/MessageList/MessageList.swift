@@ -154,13 +154,15 @@ public struct MessageList: View {
     @State private var messageList: [MessageInfo] = []
     @State private var hasMoreOlderMessage: Bool = false
     @State private var hasMoreNewerMessage: Bool = false
-    @State private var messageListStore: MessageListStore? = nil
-    @State private var isStoreInitialized = false
+    @StateObject private var storeHolder: MessageListStoreHolder
     @State private var isPageVisible = false
     @State private var hasInitialLoaded = false
     @State private var messageCountOnDisappear: Int = 0
     @State private var scrollProxyReference: ScrollViewProxy? = nil
-    @State private var isInitialScrollComplete = false
+    /// Marks that the first batch of messages (or an empty / failed fetch) has
+    /// settled. Used to gate behaviors that only make sense after the list is
+    /// populated, e.g. auto-scrolling on keyboard show or on new incoming
+    /// messages. The list itself is always visible; this flag never hides it.
     @State private var isFirstFetchCompleted = false
     @State private var isUserAtBottom = true
     @State private var pendingReceiptMessageIDs: Set<String> = []
@@ -208,62 +210,45 @@ public struct MessageList: View {
         self.customActions = customActions
         self.conversationStore = ConversationListStore.create()
         self.config = config
+        _storeHolder = StateObject(wrappedValue: MessageListStoreHolder(conversationID: conversationID))
     }
 
-    private var store: MessageListStore {
-        guard let store = messageListStore else {
-            return MessageListStore.create(conversationID: conversationID, messageListType: .history)
-        }
-        return store
-    }
+    private var store: MessageListStore { storeHolder.store }
 
     public var body: some View {
         ZStack(alignment: .bottom) {
             themeState.colors.bgColorOperate.ignoresSafeArea()
 
             scrollableMessageListView
-                .opacity(isInitialScrollComplete ? 1 : 0)
             MessageMenuView
-                .opacity(isInitialScrollComplete ? 1 : 0)
             AuxiliaryTextMenuView(menuManager: auxiliaryTextMenuManager)
                 .environmentObject(themeState)
                 .zIndex(1001)
-                .opacity(isInitialScrollComplete ? 1 : 0)
-
-            if isLoading || !isInitialScrollComplete {
-                loadingIndicatorView
-            }
         }
         .background(themeState.colors.bgColorOperate)
         .videoPlayerSupport()
         .onAppear {
             isPageVisible = true
-            initializeStoreIfNeeded()
 
             // Check if store already has messages (view was recreated)
             let storeHasMessages = store.state.value.messageList.count > 0
 
             if !hasInitialLoaded && !storeHasMessages {
-                isInitialScrollComplete = false
+                // First enter with empty store: show the empty list right away
+                // and let the `messageList` subscription below stamp the first
+                // batch without animation when it arrives. No fullscreen
+                // spinner / opacity gate, so the user sees the chat surface
+                // immediately even when the SDK takes a few hundred ms.
                 fetchMessages()
                 hasInitialLoaded = true
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-                    if !isInitialScrollComplete {
-                        isInitialScrollComplete = true
-                    }
-                }
             } else if storeHasMessages {
-                // View was recreated but store has data, skip fetch and mark complete
+                // View was recreated but store has data, skip fetch.
                 hasInitialLoaded = true
-                isInitialScrollComplete = true
-            } else {
-                isInitialScrollComplete = true
-                if messageList.count > messageCountOnDisappear {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        if let proxy = scrollProxyReference {
-                            scrollToBottom(proxy: proxy, animated: true)
-                        }
+                isFirstFetchCompleted = true
+            } else if messageList.count > messageCountOnDisappear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    if let proxy = scrollProxyReference {
+                        scrollToBottom(proxy: proxy, animated: true)
                     }
                 }
             }
@@ -272,13 +257,37 @@ public struct MessageList: View {
             isPageVisible = false
             messageCountOnDisappear = messageList.count
         }
-        .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \MessageListState.messageList))) { messageList in
-            self.messageList = messageList
+        .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \MessageListState.messageList))) { newList in
+            let isFirstBatch = !isFirstFetchCompleted && !newList.isEmpty
+            if isFirstBatch {
+                // First batch lands on an empty inverted LazyVStack. Disable
+                // SwiftUI animations for this single state mutation so the
+                // cells appear at the visual bottom in one frame instead of
+                // slide-animating from the top (which looks reversed because
+                // each cell is flipped via scaleEffect(y:-1)).
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    self.messageList = newList
+                }
+            } else {
+                self.messageList = newList
+            }
+
+            guard isFirstBatch else { return }
+            isFirstFetchCompleted = true
+            conversationStore.clearConversationUnreadCount(conversationID: conversationID, completion: nil)
+
+            if let proxy = scrollProxyReference, let targetID = locateMessage?.msgID {
+                DispatchQueue.main.async {
+                    proxy.scrollTo(targetID, anchor: .center)
+                }
+            }
         }
-        .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \MessageListState.hasMoreOlderMessage))) { hasMoreOlderMessage in
+        .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \MessageListState.hasOlderMessages))) { hasMoreOlderMessage in
             self.hasMoreOlderMessage = hasMoreOlderMessage
         }
-        .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \MessageListState.hasMoreNewerMessage))) { hasMoreNewerMessage in
+        .onReceive(store.state.subscribe(StatePublisherSelector(keyPath: \MessageListState.hasNewerMessages))) { hasMoreNewerMessage in
             self.hasMoreNewerMessage = hasMoreNewerMessage
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("kShowMessageReadReceiptNotification"))) { notification in
@@ -422,22 +431,6 @@ public struct MessageList: View {
         }
     }
 
-    private var loadingIndicatorView: some View {
-        VStack {
-            Spacer()
-            ProgressView()
-                .progressViewStyle(CircularProgressViewStyle())
-                .scaleEffect(1.5)
-            Text("loading...")
-                .font(.system(size: 14))
-                .foregroundColor(themeState.colors.textColorSecondary)
-                .padding(.top, 8)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity)
-        .zIndex(2)
-    }
-
     @ViewBuilder
     private func messageListContent(scrollProxy: ScrollViewProxy) -> some View {
         // Newer messages at Top (Visual Bottom in Inverted)
@@ -493,6 +486,8 @@ public struct MessageList: View {
         // prefix(count) gets [Oldest, ..., Newest_Visible]
         // reversed() gets [Newest_Visible, ..., Oldest]
 
+        // Revoked messages stay in the list so that the user sees a "xxx recalled a message" tip
+        // in place; the rendering switches to a centered system tip inside MessageView.
         ForEach(messageList.reversed()) { message in
             MessageView(
                 message: message,
@@ -587,7 +582,7 @@ public struct MessageList: View {
                     handleMessageEvent(event, scrollProxy: scrollProxy)
                 }
                 .onReceive(keyboardHandler.$keyboardHeight) { keyboardHeight in
-                    if keyboardHeight > 0 && isPageVisible && isInitialScrollComplete {
+                    if keyboardHeight > 0 && isPageVisible && isFirstFetchCompleted {
                         scrollToBottom(proxy: scrollProxy, animated: true)
                     }
                 }
@@ -622,20 +617,27 @@ public struct MessageList: View {
         }
 
         if let locateMessage = locateMessage {
-            var option = MessageFetchOption()
-            option.message = locateMessage
-            option.direction = [.Older, .Newer]
+            var option = MessageLoadOption()
+            option.cursor = locateMessage
+            option.direction = .both
             option.pageCount = 10
-            store.fetchMessageList(with: option, completion: { result in
+            store.loadMessages(option: option, completion: { result in
                 switch result {
                 case .success:
                     DispatchQueue.main.async {
                         self.isLoading = false
+                        // Empty conversations never trigger the messageList
+                        // subscription, so flip the flag here so downstream
+                        // gates (keyboard / new-message auto-scroll) behave
+                        // correctly.
+                        if self.messageList.isEmpty {
+                            self.isFirstFetchCompleted = true
+                        }
                     }
                 case .failure(let error):
                     DispatchQueue.main.async {
                         self.isLoading = false
-                        self.isInitialScrollComplete = true
+                        self.isFirstFetchCompleted = true
                         print("Failed to fetch messages with target: \(error.code), \(error.message)")
                     }
                 }
@@ -646,30 +648,26 @@ public struct MessageList: View {
     }
 
     private func fetchMessagesNormal() {
-        var option = MessageFetchOption()
-        option.direction = .Older
+        var option = MessageLoadOption()
+        option.direction = .older
         option.pageCount = 20
-        store.fetchMessageList(with: option, completion: { result in
+        store.loadMessages(option: option, completion: { result in
             switch result {
             case .success:
                 DispatchQueue.main.async {
                     self.isLoading = false
+                    if self.messageList.isEmpty {
+                        self.isFirstFetchCompleted = true
+                    }
                 }
             case .failure(let error):
                 DispatchQueue.main.async {
                     self.isLoading = false
-                    self.isInitialScrollComplete = true
+                    self.isFirstFetchCompleted = true
                     print("Failed to fetch messages: \(error.code), \(error.message)")
                 }
             }
         })
-    }
-
-    private func initializeStoreIfNeeded() {
-        guard !isStoreInitialized else { return }
-
-        messageListStore = MessageListStore.create(conversationID: conversationID, messageListType: .history)
-        isStoreInitialized = true
     }
 
     private func fetchMessages() {
@@ -682,7 +680,7 @@ public struct MessageList: View {
     }
 
     private func loadMoreOlderMessages(completion: @escaping () -> Void) {
-        store.fetchMoreMessageList(direction: .Older, completion: { result in
+        store.loadOlderMessages(completion: { result in
             switch result {
             case .success:
                 completion()
@@ -699,7 +697,7 @@ public struct MessageList: View {
             return
         }
         isLoadingMoreNewerMessages = true
-        store.fetchMoreMessageList(direction: .Newer, completion: { result in
+        store.loadNewerMessages(completion: { result in
             switch result {
             case .success:
                 DispatchQueue.main.async {
@@ -738,82 +736,27 @@ public struct MessageList: View {
     }
 
     private func handleMessageEvent(_ event: MessageEvent, scrollProxy: ScrollViewProxy) {
+        // After the `AtomicXCore` refactor, `MessageEvent` only emits
+        // `.onReceiveNewMessage`. Initial-fetch / load-more / send / delete
+        // behaviors are now driven from the `messageList` state subscription
+        // above instead of this event publisher.
         switch event {
-        case .fetchMessages(let messages, _):
-            conversationStore.clearConversationUnreadCount(conversationID, completion: nil)
-
-            // Fetch message reactions if supported
-            if config.isSupportReaction && !messages.isEmpty {
-                fetchMessageReactions(messages)
-            }
-
-            // Only scroll on the very first fetch, use dedicated flag to track
-            if !isFirstFetchCompleted {
-                isFirstFetchCompleted = true
-                if let targetID = locateMessage?.msgID {
-                    scrollToTargetMessage(proxy: scrollProxy, targetID: targetID)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        isInitialScrollComplete = true
-                    }
-                } else {
-                    // Delay scroll to wait for media messages to complete layout
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                        scrollToBottomImmediately(proxy: scrollProxy)
-                        isInitialScrollComplete = true
-                    }
-                }
-            } else {
-                // Subsequent fetches don't scroll
-                isInitialScrollComplete = true
-            }
-        case .fetchMoreMessages(let messages):
-            // Fetch message reactions for newly loaded messages
-            if config.isSupportReaction && !messages.isEmpty {
-                fetchMessageReactions(messages)
-            }
-
-            if let anchorId = anchorMessageId {
-                DispatchQueue.main.async {
-                    withAnimation(.none) {
-                        scrollProxy.scrollTo(anchorId, anchor: .top)
-                    }
-                }
-                anchorMessageId = nil
-            }
-        case .sendMessage:
-            if isInitialScrollComplete {
-                scrollToBottom(proxy: scrollProxy, animated: true)
-            }
-        case .recvMessage(let message):
-            // Fetch message reactions for new received message
+        case .onReceiveNewMessage(let message):
             if config.isSupportReaction {
                 fetchMessageReactions([message])
             }
 
-            // Only scroll to bottom if user is already at bottom
-            if isInitialScrollComplete && isUserAtBottom {
+            if isFirstFetchCompleted && isUserAtBottom {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     scrollToBottom(proxy: scrollProxy, animated: true)
                 }
             }
-            conversationStore.clearConversationUnreadCount(conversationID, completion: nil)
-        case .deleteMessages:
-            break
+            conversationStore.clearConversationUnreadCount(conversationID: conversationID, completion: nil)
         }
     }
 
     private func fetchMessageReactions(_ messages: [MessageInfo]) {
         guard config.isSupportReaction else { return }
-        store.fetchMessageReactions(messages,
-                                    maxUserCountPerReaction: 3,
-                                    completion: { result in
-                                        switch result {
-                                        case .success:
-                                            break
-                                        case .failure(let error):
-                                            print("Failed to fetch message reactions: \(error.code), \(error.message)")
-                                        }
-                                    })
     }
 
     private func setupScrollDetection() {}
@@ -826,9 +769,10 @@ public struct MessageList: View {
     }
 
     private func handleMessageAppear(_ message: MessageInfo) {
-        guard !message.isSelf,
+        let msgID = message.msgID
+        guard !message.isSentBySelf,
               message.needReadReceipt,
-              let msgID = message.msgID,
+              !msgID.isEmpty,
               !sentReceiptMessageIDs.contains(msgID)
         else {
             return
@@ -847,10 +791,8 @@ public struct MessageList: View {
 
     private func sendBatchReadReceipts() {
         let messagesToSend = messageList.filter {
-            if let msgID = $0.msgID {
-                return pendingReceiptMessageIDs.contains(msgID)
-            }
-            return false
+            let msgID = $0.msgID
+            return !msgID.isEmpty && pendingReceiptMessageIDs.contains(msgID)
         }
 
         guard !messagesToSend.isEmpty else {
@@ -858,10 +800,11 @@ public struct MessageList: View {
             return
         }
 
-        store.sendMessageReadReceipts(messagesToSend) { result in
+        store.sendMessageReadReceipts(messageList: messagesToSend) { result in
             if case .success = result {
                 for message in messagesToSend {
-                    if let msgID = message.msgID {
+                    let msgID = message.msgID
+                    if !msgID.isEmpty {
                         DispatchQueue.main.async {
                             self.sentReceiptMessageIDs.insert(msgID)
                         }
@@ -909,23 +852,22 @@ public struct MessageList: View {
     }
 
     private func toggleMessageSelection(_ message: MessageInfo) {
-        guard let msgID = message.msgID else { return }
+        let msgID = message.msgID
+        guard !msgID.isEmpty else { return }
         multiSelectManager.toggleSelection(messageID: msgID)
         notifyMultiSelectModeChange()
     }
 
     private func getSelectedMessages() -> [MessageInfo] {
         return messageList.filter { message in
-            if let msgID = message.msgID {
-                return multiSelectManager.selectedMessageIDs.contains(msgID)
-            }
-            return false
+            let msgID = message.msgID
+            return !msgID.isEmpty && multiSelectManager.selectedMessageIDs.contains(msgID)
         }
     }
 
     private func deleteSelected() {
         let messagesToDelete = getSelectedMessages()
-        store.deleteMessages(messagesToDelete) { result in
+        store.deleteMessages(messageList: messagesToDelete) { result in
             DispatchQueue.main.async {
                 if case .success = result {
                     exitMultiSelectMode()
@@ -937,29 +879,32 @@ public struct MessageList: View {
     // MARK: - Forward
 
     private func executeForward(messages: [MessageInfo], to conversationIDs: [String], type: MessageForwardType) {
+        // Only messages in sendSuccess status can be forwarded (SDK error 6017 otherwise)
+        let validMessages = messages.filter { $0.status == .sendSuccess }
+        let filteredCount = messages.count - validMessages.count
+        if filteredCount > 0 {
+            print(">>>>> executeForward: \(filteredCount) message(s) filtered out, status is not sendSuccess")
+        }
+        guard !validMessages.isEmpty else {
+            WindowToastManager.shared.show(LocalizedChatString("RelayUnsupportForward"), type: .error, duration: 3)
+            return
+        }
+
         var successCount = 0
         var failureCount = 0
         let totalCount = conversationIDs.count
 
         for targetConversationID in conversationIDs {
             var mergedForwardInfo: MergedForwardInfo?
-            var messagesWithPushInfo = messages
+            var messagesWithPushInfo = validMessages
 
             if type == .merged {
-                let title = MessageListHelper.generateMergedTitle(messages: messages, conversationID: conversationID)
-                let abstractList = MessageListHelper.generateAbstractList(messages: messages)
+                let title = MessageListHelper.generateMergedTitle(messages: validMessages, conversationID: conversationID)
+                let abstractList = MessageListHelper.generateAbstractList(messages: validMessages)
                 mergedForwardInfo = MergedForwardInfo()
                 mergedForwardInfo!.title = title
                 mergedForwardInfo!.abstractList = abstractList
                 mergedForwardInfo!.compatibleText = "Merged messages"
-                mergedForwardInfo?.needReadReceipt = AppBuilderConfig.shared.enableReadReceipt
-                // Build a temp merged message to get abstract
-                var tempMergedMessage = MessageInfo()
-                tempMergedMessage.messageType = .merged
-                mergedForwardInfo?.offlinePushInfo = createOfflinePushInfo(
-                    conversationID: targetConversationID,
-                    message: tempMergedMessage
-                )
             } else {
                 mergedForwardInfo = nil
                 for i in 0 ..< messagesWithPushInfo.count {
@@ -971,13 +916,21 @@ public struct MessageList: View {
                 }
             }
 
-            var forwardOption = MessageForwardOption()
+            var sendOption = SendMessageOption()
+            sendOption.needReadReceipt = AppBuilderConfig.shared.enableReadReceipt
+            sendOption.offlinePushInfo = createOfflinePushInfo(
+                conversationID: targetConversationID,
+                pushDescription: type == .merged ? LocalizedChatString("MessageTypeMergedHistory") : nil
+            )
+
+            var forwardOption = ForwardMessageOption()
             forwardOption.forwardType = type
             forwardOption.mergedForwardInfo = mergedForwardInfo
+            forwardOption.sendMessageOption = sendOption
 
             store.forwardMessages(
-                messagesWithPushInfo,
-                forwardOption: forwardOption,
+                messageList: messagesWithPushInfo,
+                option: forwardOption,
                 conversationID: targetConversationID,
                 completion: { result in
                     DispatchQueue.main.async {
@@ -1010,18 +963,13 @@ public struct MessageList: View {
         for targetConversationID in conversationIDs {
             let messageInputStore = MessageInputStore.create(conversationID: targetConversationID)
 
-            // Build text message
-            var message = MessageInfo()
-            var messageBody = MessageBody()
-            messageBody.text = asrText
-            message.messageBody = messageBody
-            message.messageType = .text
-            message.offlinePushInfo = createOfflinePushInfo(
+            var option = SendMessageOption()
+            option.offlinePushInfo = createOfflinePushInfo(
                 conversationID: targetConversationID,
-                message: message
+                pushDescription: EmojiManager.shared.createLocalizedStringFromEmojiCodes(asrText)
             )
 
-            messageInputStore.sendMessage(message) { result in
+            messageInputStore.sendMessage(payload: .text(TextSendMessagePayload(text: asrText)), option: option) { result in
                 DispatchQueue.main.async {
                     switch result {
                     case .success:
@@ -1052,18 +1000,13 @@ public struct MessageList: View {
         for targetConversationID in conversationIDs {
             let messageInputStore = MessageInputStore.create(conversationID: targetConversationID)
 
-            // Build text message
-            var message = MessageInfo()
-            var messageBody = MessageBody()
-            messageBody.text = translatedText
-            message.messageBody = messageBody
-            message.messageType = .text
-            message.offlinePushInfo = createOfflinePushInfo(
+            var option = SendMessageOption()
+            option.offlinePushInfo = createOfflinePushInfo(
                 conversationID: targetConversationID,
-                message: message
+                pushDescription: EmojiManager.shared.createLocalizedStringFromEmojiCodes(translatedText)
             )
 
-            messageInputStore.sendMessage(message) { result in
+            messageInputStore.sendMessage(payload: .text(TextSendMessagePayload(text: translatedText)), option: option) { result in
                 DispatchQueue.main.async {
                     switch result {
                     case .success:
@@ -1099,7 +1042,8 @@ public struct MessageList: View {
 
     private func createOfflinePushInfo(
         conversationID: String? = nil,
-        message: MessageInfo? = nil
+        message: MessageInfo? = nil,
+        pushDescription: String? = nil
     ) -> OfflinePushInfo {
         let loginUserInfo = LoginStore.shared.state.value.loginUserInfo
         let selfUserId = loginUserInfo?.userID ?? ""
@@ -1126,7 +1070,9 @@ public struct MessageList: View {
             title = selfName
         }
 
-        if let message = message {
+        if let pushDescription = pushDescription {
+            description = trimPushDescription(pushDescription)
+        } else if let message = message {
             description = trimPushDescription(getMessageTypeAbstract(message))
         } else {
             description = ""
@@ -1162,14 +1108,17 @@ public struct MessageList: View {
     private func getMessageTypeAbstract(_ message: MessageInfo) -> String {
         switch message.messageType {
         case .text:
-            return EmojiManager.shared.createLocalizedStringFromEmojiCodes(message.messageBody?.text ?? "")
+            if case .text(let payload) = message.messagePayload {
+                return EmojiManager.shared.createLocalizedStringFromEmojiCodes(payload.text)
+            }
+            return ""
         case .image:
             return LocalizedChatString("MessageTypeImage")
         case .video:
             return LocalizedChatString("MessageTypeVideo")
         case .file:
             return LocalizedChatString("MessageTypeFile")
-        case .sound:
+        case .audio:
             return LocalizedChatString("MessageTypeVoice")
         case .face:
             return LocalizedChatString("MessageTypeAnimateEmoji")
@@ -1256,5 +1205,21 @@ private struct ForwardTypeDialogModifier: ViewModifier {
 
             Button(LocalizedChatString("Cancel"), role: .cancel) {}
         }
+    }
+}
+
+/// Holds a single ``MessageListStore`` instance for the lifetime of a `MessageList`
+/// view. Wrapped in `ObservableObject` so it can be used with `@StateObject`, which
+/// guarantees the store is constructed exactly once per view identity. Earlier
+/// implementations created a transient store in a computed getter when the
+/// `@State` value was still `nil`; those throwaway stores would register
+/// themselves as IM SDK listeners and then be immediately deallocated, leaving
+/// the SDK with a dangling pointer in its listener `NSHashTable` and crashing
+/// later on the main queue when callbacks fired.
+private final class MessageListStoreHolder: ObservableObject {
+    let store: MessageListStore
+
+    init(conversationID: String) {
+        self.store = MessageListStore.create(conversationID: conversationID)
     }
 }

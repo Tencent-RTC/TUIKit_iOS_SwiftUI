@@ -5,9 +5,17 @@ target 'ChatDemo' do
   
   pod 'AtomicX/Chat', :path => '../../atomic-x/AtomicX.podspec'
   pod 'ChatUIKit', :path => '../uikit/ChatUIKit.podspec'
-  pod 'AtomicXCore', '3.6.1'
+  pod 'AtomicXCore', '4.2.4'
+  pod 'TIMPush', '9.0.7652'
+  pod 'TXIMSDK_Plus_iOS_XCFramework', '9.0.7661'
 
-end 
+end
+
+target 'pushservice' do
+  use_frameworks! :linkage => :static
+  
+  pod 'TIMPush', '9.0.7652'
+end
 
 #Pods config
 post_install do |installer|
@@ -28,6 +36,15 @@ post_install do |installer|
             config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = "15.0"
             
         end
+    end
+    
+    # Fix resource script issues for pushservice extension
+    # Notification Service Extension should not copy privacy bundles
+    # Clear the resource script content to skip resource copying
+    resources_script = File.join(installer.sandbox.root, 'Target Support Files/Pods-pushservice/Pods-pushservice-resources.sh')
+    if File.exist?(resources_script)
+        File.write(resources_script, "#!/bin/sh\n# Resources disabled for Notification Service Extension\nexit 0\n")
+        puts "Disabled resource copying for Pods-pushservice target"
     end
 end
 

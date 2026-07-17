@@ -139,23 +139,23 @@ class TranslationTextParser {
             return
         }
         
-        // Fetch user info using C2CSettingStore
         var names = [String](repeating: "", count: regularUserIDs.count)
         let group = DispatchGroup()
         
         for (index, userID) in regularUserIDs.enumerated() {
             group.enter()
-            let settingStore = C2CSettingStore.create(userID: userID)
-            settingStore.fetchUserInfo(completion: { result in
-                switch result {
-                case .success:
-                    let nickname = settingStore.state.value.nickname
-                    names[index] = nickname.isEmpty ? userID : nickname
-                case .failure:
+            ContactStore.shared.getContactInfo(userIDList: [userID], completion: ContactInfoHandler(
+                onSuccess: { contactInfoList in
+                    let contactInfo = contactInfoList.first
+                    let displayName = contactInfo?.friendRemark?.isEmpty == false ? contactInfo?.friendRemark : contactInfo?.nickname
+                    names[index] = displayName?.isEmpty == false ? displayName! : userID
+                    group.leave()
+                },
+                onFailure: { _, _ in
                     names[index] = userID
+                    group.leave()
                 }
-                group.leave()
-            })
+            ))
         }
         
         group.notify(queue: .main) {
@@ -167,6 +167,24 @@ class TranslationTextParser {
                 }
             }
             completion(finalNames)
+        }
+    }
+
+    private final class ContactInfoHandler: GetContactInfoCompletionHandler {
+        private let onSuccessBlock: ([ContactInfo]) -> Void
+        private let onFailureBlock: (Int, String) -> Void
+
+        init(onSuccess: @escaping ([ContactInfo]) -> Void, onFailure: @escaping (Int, String) -> Void) {
+            self.onSuccessBlock = onSuccess
+            self.onFailureBlock = onFailure
+        }
+
+        func onSuccess(contactInfoList: [ContactInfo]) {
+            onSuccessBlock(contactInfoList)
+        }
+
+        func onFailure(code: Int, desc: String) {
+            onFailureBlock(code, desc)
         }
     }
     

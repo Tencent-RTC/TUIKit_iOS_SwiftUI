@@ -32,7 +32,8 @@ struct MessageView: View {
     private var audioPlaybackManager: AudioPlaybackManager
 
     private var isSelected: Bool {
-        guard let msgID = message.msgID else { return false }
+        let msgID = message.msgID
+        guard !msgID.isEmpty else { return false }
         return multiSelectManager.selectedMessageIDs.contains(msgID)
     }
 
@@ -56,7 +57,7 @@ struct MessageView: View {
         case 2:
             return false
         default:
-            return !message.isSelf
+            return !message.isSentBySelf
         }
     }
 
@@ -77,9 +78,14 @@ struct MessageView: View {
         self.parentMessageList = parentMessageList
         self.displayMode = displayMode
         self._messageInputStore = State(initialValue: nil)
+        // In merged detail mode the sub-messages are not backed by a MessageListStore. Hand
+        // them to ImageViewerManager so it can build the preview list statically instead of
+        // calling `loadMessages` on an empty store (which would yield a black screen).
+        let staticMessages: [MessageInfo]? = displayMode == .merged ? parentMessageList : nil
         self._imageViewerManager = StateObject(wrappedValue: ImageViewerManager(
             conversationID: conversationID,
-            currentMessage: message
+            currentMessage: message,
+            staticMessages: staticMessages
         ))
     }
 
@@ -123,13 +129,34 @@ struct MessageView: View {
 
     @ViewBuilder
     private var contentView: some View {
-        if let messageBody = message.messageBody, message.messageType == .system {
-            systemMessageView(messageBody)
-        } else if let messageBody = message.messageBody, message.messageType == .custom, isCustomSystemMessage(messageBody) {
-            customSystemMessageView(messageBody)
+        if message.status == .revoked {
+            revokedMessageView
+        } else if case .tips(let payload) = message.messagePayload {
+            systemMessageView(payload)
+        } else if case .custom(let payload) = message.messagePayload, isCustomSystemMessage(payload) {
+            customSystemMessageView(payload)
         } else {
             messageContentWrapper
         }
+    }
+
+    @ViewBuilder
+    private var revokedMessageView: some View {
+        // Rendered in place of the original message so the chat history makes sense, e.g.
+        // "You recalled a message" / ""xxx" recalled a message". Reuses the existing
+        // localized strings and abstraction logic from MessageListHelper to stay in sync
+        // with the conversation-list summary.
+        let text = MessageListHelper.getMessageAbstract(message)
+        HStack {
+            Spacer()
+            Text(text)
+                .font(.system(size: 12))
+                .foregroundColor(themeState.colors.textColorTertiary)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 12)
+            Spacer()
+        }
+        .padding(.vertical, 4)
     }
 
     private func getTimeString() -> String? {
@@ -140,14 +167,14 @@ struct MessageView: View {
     }
 
     public func getMessageTimeString(for message: MessageInfo, at index: Int, messageList: [MessageInfo]) -> String? {
-        guard let messageDate = message.timestamp else { return nil }
+        guard let messageDate = date(from: message.timestamp) else { return nil }
         if index == 0 {
             return DateHelper.convertDateToYMDStr(messageDate)
         }
         let prev = index - 1
         guard prev >= 0, prev < messageList.count else { return nil }
         let previousMessage = messageList[prev]
-        guard let previousDate = previousMessage.timestamp else { return nil }
+        guard let previousDate = date(from: previousMessage.timestamp) else { return nil }
         let timeDifference = messageDate.timeIntervalSince(previousDate)
         let timeThreshold: TimeInterval = 300
         if timeDifference > timeThreshold {
@@ -172,7 +199,7 @@ struct MessageView: View {
 
                     userAvatar(isShow: shouldShowAvatar, isRight: false)
                     HStack(alignment: .top, spacing: 0) {
-                        if config.isShowLeftNickname, let sender = message.sender.nickname, !sender.isEmpty {
+                        if config.isShowLeftNickname, let sender = message.from.nickname, !sender.isEmpty {
                             nicknameView(sender: sender)
                         }
                         messageContent(alignment: .leading)
@@ -192,7 +219,7 @@ struct MessageView: View {
 
                     Spacer(minLength: config.horizontalPadding)
                     if config.isShowRightNickname {
-                        if let sender = message.sender.nickname, !sender.isEmpty {
+                        if let sender = message.from.nickname, !sender.isEmpty {
                             nicknameView(sender: sender)
                         }
                     }
@@ -216,25 +243,25 @@ struct MessageView: View {
     private func userAvatar(isShow: Bool, isRight: Bool) -> some View {
         Group {
             if isShow {
-                Avatar(url: message.sender.avatarURL ?? "", name: message.sender.nickname ?? "")
+                Avatar(url: message.from.avatarURL ?? "", name: message.from.nickname ?? "")
                     .frame(width: 36, height: 36)
                     .padding(isRight ? .leading : .trailing, config.avatarSpacing)
                     .contentShape(Rectangle())
-                    .scaleEffect(message.isSelf ? 1.0 : 1.0)
+                    .scaleEffect(message.isSentBySelf ? 1.0 : 1.0)
                     .onTapGesture {
-                        if !message.isSelf {
-                            onUserClick?(message.sender.userID)
+                        if !message.isSentBySelf {
+                            onUserClick?(message.from.userID)
                         }
                     }
                     .onLongPressGesture {
                         // Long press to trigger mention user
-                        if !message.isSelf {
+                        if !message.isSentBySelf {
                             NotificationCenter.default.post(
                                 name: NSNotification.Name("mentionUserNotification"),
                                 object: nil,
                                 userInfo: [
-                                    "userID": message.sender.userID,
-                                    "nickname": message.sender.nickname ?? ""
+                                    "userID": message.from.userID,
+                                    "nickname": message.from.nickname ?? ""
                                 ]
                             )
                         }
@@ -295,11 +322,11 @@ struct MessageView: View {
     private func messageContent(alignment: HorizontalAlignment) -> some View {
         VStack(alignment: alignment, spacing: 4) {
             HStack(alignment: .bottom, spacing: 4) {
-                if message.isSelf && message.status == .sendFail {
+                if message.isSentBySelf && message.status == .sendFail {
                     sendFailIcon
-                } else if message.isSelf && message.status == .violation {
+                } else if message.isSentBySelf && message.status == .violation {
                     violationIcon
-                } else if message.isSelf && message.status == .sending {
+                } else if message.isSentBySelf && message.status == .sending {
                     sendingLoadingIcon
                 }
 
@@ -322,11 +349,11 @@ struct MessageView: View {
                 .scaleEffect(longPressed ? 0.97 : 1.0)
                 .animation(.spring(response: 0.3), value: longPressed)
 
-                if !message.isSelf && message.status == .sendFail {
+                if !message.isSentBySelf && message.status == .sendFail {
                     sendFailIcon
-                } else if !message.isSelf && message.status == .violation {
+                } else if !message.isSentBySelf && message.status == .violation {
                     violationIcon
-                } else if !message.isSelf && message.status == .sending {
+                } else if !message.isSentBySelf && message.status == .sending {
                     sendingLoadingIcon
                 }
             }
@@ -346,14 +373,14 @@ struct MessageView: View {
                     reactionList: message.reactionList,
                     currentUserID: LoginStore.shared.state.value.loginUserInfo?.userID ?? "",
                     onFetchUsers: { reactionID in
-                        actionStore.fetchMessageReactionUsers(
+                        actionStore.loadReactionUsers(
                             reactionID: reactionID,
                             count: 100,
                             completion: nil
                         )
                     },
                     onRemoveReaction: { reactionID in
-                        actionStore.removeMessageReaction(
+                        actionStore.removeReaction(
                             reactionID: reactionID,
                             completion: { result in
                                 DispatchQueue.main.async {
@@ -395,20 +422,20 @@ struct MessageView: View {
                 NotificationCenter.default.post(
                     name: NSNotification.Name("reactionBarAppeared"),
                     object: nil,
-                    userInfo: ["msgID": message.msgID ?? ""]
+                    userInfo: ["msgID": message.msgID]
                 )
             }
         }
     }
 
-    private func systemMessageView(_ messageBody: MessageBody) -> some View {
-        guard let systemInfo = messageBody.systemMessage, config.isShowSystemMessage else {
+    private func systemMessageView(_ payload: TipsMessagePayload) -> some View {
+        guard let groupTips = payload.groupTips, config.isShowSystemMessage else {
             return AnyView(EmptyView())
         }
         return AnyView(
             HStack {
                 Spacer()
-                Text(MessageListHelper.getSystemInfoDisplayString(systemInfo))
+                Text(MessageListHelper.getGroupTipsDisplayString(groupTips))
                     .font(.system(size: 12))
                     .foregroundColor(themeState.colors.textColorTertiary)
                     .padding(.vertical, 6)
@@ -419,8 +446,8 @@ struct MessageView: View {
         )
     }
 
-    private func isCustomSystemMessage(_ messageBody: MessageBody) -> Bool {
-        guard let data = messageBody.customMessage?.data,
+    private func isCustomSystemMessage(_ payload: CustomMessagePayload) -> Bool {
+        guard let data = payload.customData.data(using: .utf8),
               let customInfo = ChatUtil.jsonData2Dictionary(jsonData: data),
               let businessID = customInfo["businessID"] as? String
         else {
@@ -429,14 +456,14 @@ struct MessageView: View {
         return businessID == "group_create"
     }
 
-    private func customSystemMessageView(_ messageBody: MessageBody) -> some View {
+    private func customSystemMessageView(_ payload: CustomMessagePayload) -> some View {
         if config.isShowSystemMessage == false {
             return AnyView(EmptyView())
         }
         return AnyView(
             HStack {
                 Spacer()
-                if let data = messageBody.customMessage?.data,
+                if let data = payload.customData.data(using: .utf8),
                    let customInfo = ChatUtil.jsonData2Dictionary(jsonData: data),
                    let businessID = customInfo["businessID"] as? String,
                    businessID == "group_create"
@@ -462,92 +489,55 @@ struct MessageView: View {
     @ViewBuilder
     private var messageContentBody: some View {
         Group {
-            if let messageBody = message.messageBody {
-                switch message.messageType {
+            if let payload = message.messagePayload {
+                switch payload {
                 case .merged:
                     MergeMessageView(message: message)
                         .allowsHitTesting(!isMultiSelectMode)
-                case .text:
+                case .text(let payload):
                     TextMessageView(
-                        messageBody: messageBody,
+                        payload: payload,
                         message: message,
                         isLeft: isLeft,
-                        isSelf: message.isSelf,
+                        isSelf: message.isSentBySelf,
                         shouldHighlight: shouldHighlightMessage(message)
                     )
-                case .image:
+                case .image(let payload):
                     ImageMessageView(
-                        messageBody: messageBody,
+                        payload: payload,
                         message: message,
                         messageListStore: messageListStore,
                         onImageTap: imageViewerManager.showImageViewerIfAvailable
                     )
                     .allowsHitTesting(!isMultiSelectMode)
-                case .video:
+                case .video(let payload):
                     VideoMessageView(
-                        messageBody: messageBody,
+                        payload: payload,
                         message: message,
                         messageListStore: messageListStore,
                         onVideoTap: imageViewerManager.showImageViewerIfAvailable,
                         onPlayVideo: {
-                            if let videoPath = messageBody.videoPath {
-                                let videoData = VideoData(
-                                    uri: videoPath,
-                                    localPath: videoPath,
-                                    width: 1920,
-                                    height: 1080
-                                )
-                                // Use UIKit presentation in merged detail view to avoid dismissing the sheet
-                                if displayMode == .merged {
-                                    VideoPlayer.shared.playWithUIKit(videoData: videoData)
-                                } else {
-                                    VideoPlayer.shared.play(videoData: videoData)
-                                }
-                            } else {
-                                messageListStore.downloadMessageResource(message, resourceType: .video, completion: { result in
-                                    switch result {
-                                    case .success:
-                                        DispatchQueue.main.async {
-                                            if let videoPath = messageBody.videoPath {
-                                                let videoData = VideoData(
-                                                    uri: videoPath,
-                                                    localPath: videoPath,
-                                                    width: 1920,
-                                                    height: 1080
-                                                )
-                                                // Use UIKit presentation in merged detail view to avoid dismissing the sheet
-                                                if displayMode == .merged {
-                                                    VideoPlayer.shared.playWithUIKit(videoData: videoData)
-                                                } else {
-                                                    VideoPlayer.shared.play(videoData: videoData)
-                                                }
-                                            }
-                                        }
-                                    case .failure(let error):
-                                        print("\(LocalizedChatString("VideoDownloadFailed")): \(error.code), \(error.message)")
-                                    }
-                                })
-                            }
+                            playVideoMessage(fallbackPayload: payload)
                         }
                     )
                     .allowsHitTesting(!isMultiSelectMode)
-                case .file:
+                case .file(let payload):
                     FileMessageView(
-                        messageBody: messageBody,
+                        payload: payload,
                         message: message,
                         messageListStore: messageListStore,
                         isLeft: isLeft,
-                        isSelf: message.isSelf,
+                        isSelf: message.isSentBySelf,
                         shouldHighlight: shouldHighlightMessage(message)
                     )
                     .allowsHitTesting(!isMultiSelectMode)
-                case .sound:
+                case .audio(let payload):
                     AudioMessageView(
-                        messageBody: messageBody,
+                        payload: payload,
                         message: message,
                         messageListStore: messageListStore,
                         isLeft: isLeft,
-                        isSelf: message.isSelf,
+                        isSelf: message.isSentBySelf,
                         shouldHighlight: shouldHighlightMessage(message),
                         audioPlayer: audioPlayer,
                         audioPlaybackManager: audioPlaybackManager
@@ -580,10 +570,15 @@ struct MessageView: View {
     }
 
     private func resendMessage(_ messageToResend: MessageInfo) {
-        guard messageToResend.messageBody != nil else { return }
-        let resendMessage = messageToResend
+        guard let payload = sendPayload(from: messageToResend) else { return }
+        var option = SendMessageOption()
+        option.needReadReceipt = messageToResend.needReadReceipt
+        option.atUserList = messageToResend.atUserList.isEmpty ? nil : messageToResend.atUserList
+        option.isExtensionEnabled = messageToResend.isExtensionEnabled
+        option.offlinePushInfo = messageToResend.offlinePushInfo
+        messageListStore.deleteMessages(messageList: [messageToResend]) { _ in }
         messageInputStore = MessageInputStore.create(conversationID: messageListStore.conversationID)
-        messageInputStore?.sendMessage(resendMessage) { result in
+        messageInputStore?.sendMessage(payload: payload, option: option) { result in
             DispatchQueue.main.async {
                 switch result {
                 case .success:
@@ -592,6 +587,113 @@ struct MessageView: View {
                     print("Failed to resend message: \(error.code), \(error.message)")
                 }
             }
+        }
+    }
+
+    private func date(from timestamp: Int64?) -> Date? {
+        guard let timestamp = timestamp else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(timestamp))
+    }
+
+    private func currentVideoPayload(fallback: VideoMessagePayload) -> VideoMessagePayload {
+        if let updatedMessage = messageListStore.state.value.messageList.first(where: { $0.msgID == message.msgID }),
+           case .video(let payload) = updatedMessage.messagePayload {
+            return payload
+        }
+        return fallback
+    }
+
+    /// Decide how to play a video message: prefer a local file, otherwise stream from the
+    /// remote URL (filled by `MessageActionStoreImpl.fillMediaURLsForMergedMessages` for
+    /// merged sub-messages), otherwise trigger a download and retry on completion. This
+    /// mirrors Android's strategy of letting the player consume either local path or URL.
+    private func playVideoMessage(fallbackPayload: VideoMessagePayload) {
+        let current = currentVideoPayload(fallback: fallbackPayload)
+        if let videoPath = current.videoPath, !videoPath.isEmpty,
+           FileManager.default.fileExists(atPath: videoPath)
+        {
+            presentVideo(uri: videoPath, localPath: videoPath)
+            return
+        }
+        if let url = current.videoURL, !url.isEmpty {
+            presentVideo(uri: url, localPath: nil)
+            return
+        }
+        MessageActionStore.create(message: message).downloadMedia(quality: .standard) { result in
+            switch result {
+            case .success:
+                DispatchQueue.main.async {
+                    let refreshed = currentVideoPayload(fallback: fallbackPayload)
+                    if let videoPath = refreshed.videoPath, !videoPath.isEmpty {
+                        presentVideo(uri: videoPath, localPath: videoPath)
+                    } else if let url = refreshed.videoURL, !url.isEmpty {
+                        presentVideo(uri: url, localPath: nil)
+                    }
+                }
+            case .failure(let error):
+                print("\(LocalizedChatString("VideoDownloadFailed")): \(error.code), \(error.message)")
+            }
+        }
+    }
+
+    private func presentVideo(uri: String, localPath: String?) {
+        let videoData = VideoData(
+            uri: uri,
+            localPath: localPath,
+            width: 1920,
+            height: 1080
+        )
+        // Use UIKit presentation in merged detail view to avoid dismissing the sheet
+        if displayMode == .merged {
+            VideoPlayer.shared.playWithUIKit(videoData: videoData)
+        } else {
+            VideoPlayer.shared.play(videoData: videoData)
+        }
+    }
+
+    private func sendPayload(from message: MessageInfo) -> SendMessagePayload? {
+        guard let payload = message.messagePayload else { return nil }
+        switch payload {
+        case .text(let text):
+            return .text(TextSendMessagePayload(text: text.text))
+        case .custom(let custom):
+            return .custom(CustomSendMessagePayload(
+                customData: custom.customData,
+                description: custom.description,
+                extensionInfo: custom.extensionInfo
+            ))
+        case .image(let image):
+            guard let imagePath = image.originalImagePath else { return nil }
+            return .image(ImageSendMessagePayload(
+                imagePath: imagePath,
+                imageWidth: image.originalImageWidth,
+                imageHeight: image.originalImageHeight
+            ))
+        case .audio(let audio):
+            guard let audioPath = audio.audioPath else { return nil }
+            return .audio(AudioSendMessagePayload(audioFilePath: audioPath, duration: audio.audioDuration))
+        case .video(let video):
+            guard let videoPath = video.videoPath,
+                  let snapshotPath = video.videoSnapshotPath else { return nil }
+            return .video(VideoSendMessagePayload(
+                videoFilePath: videoPath,
+                videoType: video.videoType ?? "mp4",
+                duration: video.videoDuration,
+                snapshotPath: snapshotPath,
+                snapshotWidth: video.videoSnapshotWidth,
+                snapshotHeight: video.videoSnapshotHeight
+            ))
+        case .file(let file):
+            guard let filePath = file.filePath else { return nil }
+            return .file(FileSendMessagePayload(
+                filePath: filePath,
+                fileName: file.fileName ?? URL(fileURLWithPath: filePath).lastPathComponent,
+                fileSize: file.fileSize
+            ))
+        case .face(let face):
+            return .face(FaceSendMessagePayload(index: face.faceIndex, data: face.faceData ?? ""))
+        case .tips, .merged, .stream:
+            return nil
         }
     }
 }

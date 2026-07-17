@@ -282,7 +282,7 @@ struct SearchResultView: View {
         }) {
             HStack(spacing: 12) {
                 Avatar(
-                    url: result.userInfo.avatarURL,
+                    url: result.userInfo?.avatarURL,
                     name: getFriendDisplayName(result),
                     size: .m
                 )
@@ -312,7 +312,8 @@ struct SearchResultView: View {
     }
 
     private func buildGroupResultItem(result: GroupSearchInfo) -> some View {
-        let displayName = result.groupName.isEmpty ? result.groupID : result.groupName
+        let resolvedGroupName = result.groupName ?? ""
+        let displayName = resolvedGroupName.isEmpty ? result.groupID : resolvedGroupName
         let nameContainsKeyword = displayName.lowercased().contains(searchText.lowercased())
         let groupIDContainsKeyword = result.groupID.lowercased().contains(searchText.lowercased())
 
@@ -455,8 +456,8 @@ struct SearchResultView: View {
                     hasSearched = false
                 }
                 var option = SearchOption()
-                option.searchType = [.friend, .group, .message]
-                option.searchCount = 20
+                option.searchScope = [.friend, .group, .message]
+                option.pageSize = 20
                 searchStore.search(keywordList: [text], option: option) { _ in
                     DispatchQueue.main.async {
                         self.isSearching = false
@@ -475,7 +476,7 @@ struct SearchResultView: View {
         if let remark = friend.friendRemark, !remark.isEmpty {
             return remark
         }
-        if let nickname = friend.userInfo.nickname, !nickname.isEmpty {
+        if let nickname = friend.userInfo?.nickname, !nickname.isEmpty {
             return nickname
         }
         return friend.userID

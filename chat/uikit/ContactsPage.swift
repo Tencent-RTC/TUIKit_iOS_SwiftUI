@@ -7,16 +7,13 @@ public struct ContactsPage: View {
     @State private var showAddContactMenu = false
     @State private var showAddFriend = false
     @State private var showJoinGroup = false
-    private let contactStore: ContactListStore
     let onContactClick: ((AZOrderedListItem) -> Void)?
     let onGroupClick: ((AZOrderedListItem) -> Void)?
 
     public init(
-        contactStore: ContactListStore = ContactListStore.create(),
         onContactClick: ((AZOrderedListItem) -> Void)? = nil,
         onGroupClick: ((AZOrderedListItem) -> Void)? = nil
     ) {
-        self.contactStore = contactStore
         self.onContactClick = onContactClick
         self.onGroupClick = onGroupClick
     }
@@ -25,7 +22,6 @@ public struct ContactsPage: View {
         VStack(spacing: 0) {
             headerView
             ContactList(
-                contactStore: contactStore,
                 onContactClick: onContactClick,
                 onGroupClick: onGroupClick
             )
@@ -65,10 +61,10 @@ public struct ContactsPage: View {
             }
         )
         .sheet(isPresented: $showAddFriend) {
-            AddFriendView(contactStore: contactStore)
+            AddFriendView()
         }
         .sheet(isPresented: $showJoinGroup) {
-            JoinGroupView(contactStore: contactStore)
+            JoinGroupView()
         }
     }
 

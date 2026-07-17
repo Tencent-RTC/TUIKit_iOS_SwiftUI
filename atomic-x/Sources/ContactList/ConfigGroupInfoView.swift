@@ -1,18 +1,23 @@
 import AtomicXCore
 import SwiftUI
 
+/// Delay before sending the "group created" tip message after a successful
+/// `createGroup`. Defers the send until the ChatPage has time to mount its
+/// `MessageListStore` and register the `sendBegin` listener; without it the
+/// first-entry tip is dropped because the notification fires before the
+/// listener exists. Mirrors Android UIKit's `GROUP_CREATE_MESSAGE_DELAY`.
+private let groupCreateTipsMessageDelay: TimeInterval = 0.5
+
 public struct ConfigGroupInfoView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var themeState: ThemeState
     @State private var members: [UserPickerItem]
     @State private var groupName: String = ""
     @State private var groupID: String = ""
-    @State private var groupType: GroupType = .Work
+    @State private var groupType: GroupTypeSelection = .work
     @State private var selectedAvatar: String? = nil
     @State private var isViewAppeared = false
     @State private var showGroupTypeSelector = false
-    @State private var groupList: [ContactInfo] = []
-    let contactListStore: ContactListStore
     let onComplete: (String?, String?, String?) -> Void
     let onBack: () -> Void
 
@@ -20,9 +25,8 @@ public struct ConfigGroupInfoView: View {
         (1 ... 10).map { "https://im.sdk.qcloud.com/download/tuikit-resource/group-avatar/group_avatar_\($0).png" }
     }
 
-    public init(members: [UserPickerItem], contactListStore: ContactListStore, onComplete: @escaping (String?, String?, String?) -> Void, onBack: @escaping () -> Void) {
+    public init(members: [UserPickerItem], onComplete: @escaping (String?, String?, String?) -> Void, onBack: @escaping () -> Void) {
         self._members = State(initialValue: members)
-        self.contactListStore = contactListStore
         self.onComplete = onComplete
         self.onBack = onBack
     }
@@ -62,9 +66,6 @@ public struct ConfigGroupInfoView: View {
                     isViewAppeared = true
                 }
             }
-            .onReceive(contactListStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.groupList))) { groupList in
-                self.groupList = groupList
-            }
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .sheet(isPresented: $showGroupTypeSelector) {
@@ -92,7 +93,7 @@ public struct ConfigGroupInfoView: View {
 
     private func createGroup() {
         if !groupID.isEmpty {
-            let isCommunity = groupType == .Community
+            let isCommunity = groupType == .community
             let hasCorrectPrefix = groupID.hasPrefix("@TGS#_")
             let hasCorrectPrefixWithoutUnderline = groupID.hasPrefix("@TGS#")
 
@@ -105,35 +106,32 @@ public struct ConfigGroupInfoView: View {
             }
         }
 
-        let memberList = members.map { user in
-            var contact = ContactInfo(identifier: user.userID)
-            contact.avatarURL = user.avatarURL
-            contact.title = user.title
-            return contact
-        }
-        contactListStore.createGroup(
-            groupType: groupType.rawValue,
-            groupName: groupName,
-            groupID: groupID.isEmpty ? nil : groupID,
-            avatarURL: selectedAvatar,
-            memberList: memberList,
-            completion: { result in
-                switch result {
-                case .success:
+        var params = GroupCreateParams(groupName: groupName)
+        params.groupType = groupType.coreType
+        params.groupID = groupID.isEmpty ? nil : groupID
+        params.avatarURL = selectedAvatar
+        params.memberList = members.map { $0.userID }
+
+        GroupStore.shared.createGroup(
+            params: params,
+            completion: CreateGroupHandler(
+                onSuccess: { createdGroupID in
                     DispatchQueue.main.async {
-                        let createdGroupID = self.contactListStore.state.value.createdGroupID
-                        let conversationId = createdGroupID != nil ? "group_\(createdGroupID!)" : nil
-                        self.onComplete(createdGroupID, self.groupName, conversationId)
+                        let conversationId = createdGroupID.isEmpty ? nil : "group_\(createdGroupID)"
+                        self.onComplete(createdGroupID.isEmpty ? nil : createdGroupID, self.groupName, conversationId)
                         self.presentationMode.wrappedValue.dismiss()
-                        self.sendGroupCreateTipsMessage(groupID: createdGroupID ?? "", groupType: groupType.rawValue)
+                        DispatchQueue.main.asyncAfter(deadline: .now() + groupCreateTipsMessageDelay) {
+                            self.sendGroupCreateTipsMessage(groupID: createdGroupID, groupType: groupType.rawValue)
+                        }
                     }
-                case .failure(let error):
+                },
+                onFailure: { _, _ in
                     DispatchQueue.main.async {
                         self.onComplete(nil, nil, nil)
                         self.presentationMode.wrappedValue.dismiss()
                     }
                 }
-            }
+            )
         )
     }
 
@@ -141,9 +139,6 @@ public struct ConfigGroupInfoView: View {
         if !groupID.isEmpty {
             sendTipsMessageToGroup(groupID: groupID, groupType: groupType)
             return
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.findAndSendTipsMessage(groupType: groupType)
         }
     }
 
@@ -161,28 +156,11 @@ public struct ConfigGroupInfoView: View {
             "content": content,
             "cmd": groupType == "Community" ? 1 : 0
         ]
-        var message = MessageInfo()
-        var messageBody = MessageBody()
-        var customMessage = CustomMessageInfo()
-        customMessage.data = ChatUtil.dictionary2JsonData(dic)
-        messageBody.customMessage = customMessage
-        message.messageBody = messageBody
-        message.messageType = .custom
+        let customData = ChatUtil.dictionary2JsonData(dic)
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        let payload = CustomSendMessagePayload(customData: customData)
         let messageInputState = MessageInputStore.create(conversationID: "group_\(groupID)")
-        messageInputState.sendMessage(message, completion: nil)
-    }
-
-    private func findAndSendTipsMessage(groupType: String) {
-        contactListStore.fetchJoinedGroupList(completion: { result in
-            switch result {
-            case .success:
-                if let createdGroup = self.groupList.first(where: { $0.title == self.groupName }) {
-                    self.sendTipsMessageToGroup(groupID: createdGroup.contactID, groupType: groupType)
-                }
-            case .failure(let error):
-                break
-            }
-        })
+        messageInputState.sendMessage(payload: .custom(payload), option: nil, completion: nil)
     }
 
     private var groupNameSection: some View {
@@ -307,31 +285,44 @@ public struct ConfigGroupInfoView: View {
     }
 }
 
-private enum GroupType: String, CaseIterable, Identifiable {
-    case Work
-    case Public
-    case Meeting
-    case Community
+private enum GroupTypeSelection: String, CaseIterable, Identifiable {
+    case work = "Work"
+    case publicGroup = "Public"
+    case meeting = "Meeting"
+    case community = "Community"
     var id: String { rawValue }
     var displayName: String {
         switch self {
-        case .Work: return LocalizedChatString("CreatGroupType_Work")
-        case .Public: return LocalizedChatString("CreatGroupType_Public")
-        case .Meeting: return LocalizedChatString("CreatGroupType_Meeting")
-        case .Community: return LocalizedChatString("CreatGroupType_Community")
+        case .work: return LocalizedChatString("CreatGroupType_Work")
+        case .publicGroup: return LocalizedChatString("CreatGroupType_Public")
+        case .meeting: return LocalizedChatString("CreatGroupType_Meeting")
+        case .community: return LocalizedChatString("CreatGroupType_Community")
         }
     }
 
     var description: String {
         switch self {
-        case .Work:
+        case .work:
             return LocalizedChatString("CreatGroupType_Work_Desc")
-        case .Public:
+        case .publicGroup:
             return LocalizedChatString("CreatGroupType_Public_Desc")
-        case .Meeting:
+        case .meeting:
             return LocalizedChatString("CreatGroupType_Meeting_Desc")
-        case .Community:
+        case .community:
             return LocalizedChatString("CreatGroupType_Community_Desc")
+        }
+    }
+
+    var coreType: AtomicXCore.GroupType {
+        switch self {
+        case .work:
+            return .work
+        case .publicGroup:
+            return .publicGroup
+        case .meeting:
+            return .meeting
+        case .community:
+            return .community
         }
     }
 }
@@ -345,7 +336,7 @@ private struct UserInfo: Identifiable {
 private struct ChooseGroupTypeView: View {
     @Environment(\.presentationMode) var presentationMode
     @EnvironmentObject var themeState: ThemeState
-    @Binding var selectedGroupType: GroupType
+    @Binding var selectedGroupType: GroupTypeSelection
     let onDismiss: () -> Void
 
     var body: some View {
@@ -353,7 +344,7 @@ private struct ChooseGroupTypeView: View {
             VStack(spacing: 0) {
                 ScrollView {
                     VStack(spacing: 12) {
-                        ForEach(GroupType.allCases) { groupType in
+                        ForEach(GroupTypeSelection.allCases) { groupType in
                             GroupTypeOptionView(
                                 groupType: groupType,
                                 isSelected: selectedGroupType == groupType,
@@ -393,7 +384,7 @@ private struct ChooseGroupTypeView: View {
 
 private struct GroupTypeOptionView: View {
     @EnvironmentObject var themeState: ThemeState
-    let groupType: GroupType
+    let groupType: GroupTypeSelection
     let isSelected: Bool
     let onTap: () -> Void
 
@@ -439,5 +430,23 @@ private struct GroupTypeOptionView: View {
             .cornerRadius(16)
         }
         .buttonStyle(PlainButtonStyle())
+    }
+}
+
+private final class CreateGroupHandler: CreateGroupCompletionHandler {
+    private let onSuccessBlock: (String) -> Void
+    private let onFailureBlock: (Int, String) -> Void
+
+    init(onSuccess: @escaping (String) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessBlock = onSuccess
+        self.onFailureBlock = onFailure
+    }
+
+    func onSuccess(groupID: String) {
+        onSuccessBlock(groupID)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureBlock(code, desc)
     }
 }

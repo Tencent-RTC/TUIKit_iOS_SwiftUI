@@ -1,31 +1,40 @@
 PODS:
-  - AtomicX/Chat (3.5.0):
+  - AtomicX/Chat (4.3.0):
     - AtomicXCore
     - Kingfisher (~> 7.0)
     - Masonry
+    - SDWebImage
     - SnapKit
-  - AtomicXCore (3.5.0):
-    - RTCRoomEngine/Professional (>= 3.4.0)
-  - ChatUIKit (3.5.0):
+  - AtomicXCore (4.2.4):
+    - RTCRoomEngine/Professional (>= 4.2.0)
+    - TXLiteAVSDK_Professional (>= 13.0.20278)
+  - ChatUIKit (1.0.0):
     - AtomicX/Chat
     - AtomicXCore
     - Kingfisher
     - Masonry
   - Kingfisher (7.12.0)
   - Masonry (1.1.0)
-  - RTCRoomEngine/Professional (3.5.0):
+  - RTCRoomEngine/Professional (4.2.3):
     - TXIMSDK_Plus_iOS_XCFramework (>= 8.4.6676)
-    - TXLiteAVSDK_Professional (>= 12.2.16956)
+    - TXLiteAVSDK_Professional (>= 12.8.0.19666)
+  - SDWebImage (5.21.7):
+    - SDWebImage/Core (= 5.21.7)
+  - SDWebImage/Core (5.21.7)
   - SnapKit (5.7.1)
-  - TXIMSDK_Plus_iOS_XCFramework (8.7.7207)
-  - TXLiteAVSDK_Professional (12.9.20063):
-    - TXLiteAVSDK_Professional/Professional (= 12.9.20063)
-  - TXLiteAVSDK_Professional/Professional (12.9.20063)
+  - TIMPush (9.0.7652):
+    - TXIMSDK_Plus_iOS_XCFramework (>= 9.0.7652)
+  - TXIMSDK_Plus_iOS_XCFramework (9.0.7661)
+  - TXLiteAVSDK_Professional (13.4.21067):
+    - TXLiteAVSDK_Professional/Professional (= 13.4.21067)
+  - TXLiteAVSDK_Professional/Professional (13.4.21067)
 
 DEPENDENCIES:
   - AtomicX/Chat (from `../../atomic-x/AtomicX.podspec`)
-  - AtomicXCore (= 3.5.0)
+  - AtomicXCore (= 4.2.4)
   - ChatUIKit (from `../uikit/ChatUIKit.podspec`)
+  - TIMPush (= 9.0.7652)
+  - TXIMSDK_Plus_iOS_XCFramework (= 9.0.7661)
 
 SPEC REPOS:
   trunk:
@@ -33,7 +42,9 @@ SPEC REPOS:
     - Kingfisher
     - Masonry
     - RTCRoomEngine
+    - SDWebImage
     - SnapKit
+    - TIMPush
     - TXIMSDK_Plus_iOS_XCFramework
     - TXLiteAVSDK_Professional
 
@@ -44,16 +55,18 @@ EXTERNAL SOURCES:
     :path: "../uikit/ChatUIKit.podspec"
 
 SPEC CHECKSUMS:
-  AtomicX: 6cabe63be8a4118fc51e3370542e665c5e02593b
-  AtomicXCore: 528f0e3ddb7f5ef8bbd8296deb593647735e4a4e
-  ChatUIKit: c33db111581d352e798a857e82cf004f2a591cc3
+  AtomicX: 910246da9e5e505cf38e1649d395f7c749420d24
+  AtomicXCore: 1e0f27ff52b971bb707b40c1b55cb56b49813c26
+  ChatUIKit: 4b186f98f68db10c7378b792b8d87fef4047e086
   Kingfisher: 53a10ea35051a436b5fb626ca2dd8f3144d755e9
   Masonry: 678fab65091a9290e40e2832a55e7ab731aad201
-  RTCRoomEngine: 57ad901da63907d7b1740f809139bcd11503a86d
+  RTCRoomEngine: e1ca0e30598d05e4b7cf26efd341a4af12294ca0
+  SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SnapKit: d612e99e678a2d3b95bf60b0705ed0a35c03484a
-  TXIMSDK_Plus_iOS_XCFramework: d08f4c0e8ab0a416bfa9b6dd401f5bc2d191d51e
-  TXLiteAVSDK_Professional: 46059af0eff3078277e5b3365b5192514fd0fc39
+  TIMPush: 117c8737ef6e61a27071f5ffbcf6a55919842f5d
+  TXIMSDK_Plus_iOS_XCFramework: 833d9b6cd4fec18531b17d35d89c7f0f55060272
+  TXLiteAVSDK_Professional: 73d77e84c5a8b6c73bc06445662e3871f247e7a5
 
-PODFILE CHECKSUM: bb3c27e2f77616d655f870b3c4ba4705b0c93262
+PODFILE CHECKSUM: 5af70e134cf0da526371a23be7a84f3d353d6df1
 
 COCOAPODS: 1.16.2

@@ -2,103 +2,78 @@ import AtomicXCore
 import Foundation
 
 public class MessageListHelper {
-    public static func getSystemInfoDisplayString(_ systemMessages: [SystemMessageInfo]?) -> String {
-        guard let systemMessages = systemMessages, !systemMessages.isEmpty else {
+    public static func getGroupTipsDisplayString(_ groupTips: [GroupTipsInfo]?) -> String {
+        guard let groupTips = groupTips, !groupTips.isEmpty else {
             return ""
         }
         
-        let parts = systemMessages.compactMap { info -> String? in
-            let result: String
-            switch info {
-            case .recallMessage:
-                result = getRecallDisplayString(info)
-            default:
-                result = getGroupTipsDisplayString(info)
-            }
+        let parts = groupTips.compactMap { info -> String? in
+            let result = getGroupTipDisplayString(info)
             return result.isEmpty ? nil : result
         }
         
-        return parts.isEmpty ? LocalizedChatString("unknown") : parts.joined(separator: "")
-    }
-    
-    public static func getRecallDisplayString(_ systemInfo: SystemMessageInfo) -> String {
-        guard case .recallMessage(_, let recallMessageOperator, let isRecalledBySelf, let isInGroup, let recallReason) = systemInfo else {
-            return LocalizedChatString("MessageTipsNormalRecallMessage")
-        }
-        
-        var str: String
-        
-        if isInGroup {
-            str = String(format: LocalizedChatString("MessageTipsRecallMessageFormat"), recallMessageOperator)
-        } else {
-            if isRecalledBySelf {
-                str = LocalizedChatString("MessageTipsYouRecallMessage")
-            } else {
-                str = LocalizedChatString("MessageTipsOthersRecallMessage")
-            }
-        }
-        
-        if !recallReason.isEmpty {
-            str = "\(str): \(recallReason)"
-        }
-        
-        return str
+        return parts.isEmpty ? LocalizedChatString("unknown") : parts.joined(separator: LocalizedChatString("MessageTipsSeparator"))
     }
 
-    public static func getGroupTipsDisplayString(_ systemInfo: SystemMessageInfo) -> String {
-        switch systemInfo {
+    public static func getGroupTipDisplayString(_ groupTip: GroupTipsInfo) -> String {
+        switch groupTip {
         case .unknown:
             return ""
             
-        case .joinGroup(_, let joinMember):
-            return String(format: LocalizedChatString("MessageTipsJoinGroupFormat"), joinMember)
+        case .joinGroup(let joinMember):
+            return String(format: LocalizedChatString("MessageTipsJoinGroupFormat"), displayName(joinMember))
             
-        case .inviteToGroup(_, let inviter, let inviteesShowName):
-            return String(format: LocalizedChatString("MessageTipsInviteJoinGroupFormat"), inviter, inviteesShowName)
+        case .inviteToGroup(let inviter, let invitees):
+            let inviteesShowName = invitees.map { displayName($0) }.joined(separator: ", ")
+            return String(format: LocalizedChatString("MessageTipsInviteJoinGroupFormat"), displayName(inviter), inviteesShowName)
             
-        case .quitGroup(_, let quitMember):
-            return String(format: LocalizedChatString("MessageTipsLeaveGroupFormat"), quitMember)
+        case .quitGroup(let quitMember):
+            return String(format: LocalizedChatString("MessageTipsLeaveGroupFormat"), displayName(quitMember))
             
-        case .kickedFromGroup(_, let kickOperator, let kickedMembersShowName):
-            return String(format: LocalizedChatString("MessageTipsKickoffGroupFormat"), kickOperator, kickedMembersShowName)
+        case .kickedFromGroup(let opUser, let kickedMembers):
+            let kickedMembersShowName = kickedMembers.map { displayName($0) }.joined(separator: ", ")
+            return String(format: LocalizedChatString("MessageTipsKickoffGroupFormat"), displayName(opUser), kickedMembersShowName)
             
-        case .setGroupAdmin(_, _, let setAdminMembersShowName):
+        case .setGroupAdmin(_, let setAdminMembers):
+            let setAdminMembersShowName = setAdminMembers.map { displayName($0) }.joined(separator: ", ")
             return String(format: LocalizedChatString("MessageTipsSettAdminFormat"), setAdminMembersShowName)
             
-        case .cancelGroupAdmin(_, _, let cancelAdminMembersShowName):
+        case .cancelGroupAdmin(_, let cancelAdminMembers):
+            let cancelAdminMembersShowName = cancelAdminMembers.map { displayName($0) }.joined(separator: ", ")
             return String(format: LocalizedChatString("MessageTipsCancelAdminFormat"), cancelAdminMembersShowName)
             
-        case .muteGroupMember(_, _, let isSelfMuted, let mutedGroupMembersShowName, let muteTime):
+        case .muteGroupMember(_, let isSelfMuted, let mutedGroupMembers, let muteTime):
+            let mutedGroupMembersShowName = mutedGroupMembers.map { displayName($0) }.joined(separator: ", ")
             let actualShowName = isSelfMuted ? LocalizedChatString("You") : mutedGroupMembersShowName
             return "\(actualShowName)\(muteTime == 0 ? LocalizedChatString("MessageTipsUnmute") : LocalizedChatString("MessageTipsMute"))"
             
-        case .pinGroupMessage(_, let pinGroupMessageOperator):
-            return String(format: LocalizedChatString("MessageTipsGroupPinMessage"), pinGroupMessageOperator)
+        case .pinGroupMessage(let opUser):
+            return String(format: LocalizedChatString("MessageTipsGroupPinMessage"), displayName(opUser))
             
-        case .unpinGroupMessage(_, let unpinGroupMessageOperator):
-            return String(format: LocalizedChatString("MessageTipsGroupUnPinMessage"), unpinGroupMessageOperator)
+        case .unpinGroupMessage(let opUser):
+            return String(format: LocalizedChatString("MessageTipsGroupUnPinMessage"), displayName(opUser))
             
-        case .changeGroupName(_, let groupNameOperator, let groupName):
-            return String(format: LocalizedChatString("MessageTipsEditGroupNameFormat"), groupNameOperator, groupName)
+        case .changeGroupName(let opUser, let groupName):
+            return String(format: LocalizedChatString("MessageTipsEditGroupNameFormat"), displayName(opUser), groupName)
             
-        case .changeGroupIntroduction(_, let groupIntroductionOperator, let groupIntroduction):
-            return String(format: LocalizedChatString("MessageTipsEditGroupIntroFormat"), groupIntroductionOperator, groupIntroduction)
+        case .changeGroupIntroduction(let opUser, let groupIntroduction):
+            return String(format: LocalizedChatString("MessageTipsEditGroupIntroFormat"), displayName(opUser), groupIntroduction)
             
-        case .changeGroupNotification(_, let groupNotificationOperator, let groupNotification):
+        case .changeGroupNotification(let opUser, let groupNotification):
             let format = groupNotification.isEmpty ? LocalizedChatString("MessageTipsDeleteGroupAnnounceFormat") : LocalizedChatString("MessageTipsEditGroupAnnounceFormat")
-            return String(format: format, groupNotificationOperator, groupNotification)
+            return String(format: format, displayName(opUser), groupNotification)
             
-        case .changeGroupAvatar(_, let groupAvatarOperator, _):
-            return String(format: LocalizedChatString("MessageTipsEditGroupAvatarFormat"), groupAvatarOperator)
+        case .changeGroupAvatar(let opUser, _):
+            return String(format: LocalizedChatString("MessageTipsEditGroupAvatarFormat"), displayName(opUser))
             
-        case .changeGroupOwner(_, let groupOwnerOperator, let groupOwner):
-            return String(format: LocalizedChatString("MessageTipsEditGroupOwnerFormat"), groupOwnerOperator, groupOwner)
+        case .changeGroupOwner(let opUser, let groupOwner):
+            return String(format: LocalizedChatString("MessageTipsEditGroupOwnerFormat"), displayName(opUser), groupOwner)
             
-        case .changeGroupMuteAll(_, let groupMuteAllOperator, let isMuteAll):
+        case .changeGroupMuteAll(let opUser, let isMuteAll):
             let format = isMuteAll ? LocalizedChatString("SetShutupAllFormatString") : LocalizedChatString("CancelShutupAllFormatString")
-            return String(format: format, groupMuteAllOperator)
+            return String(format: format, displayName(opUser))
             
-        case .changeJoinGroupApproval(_, let groupJoinApprovalOperator, let groupJoinOption):
+        case .changeJoinGroupApproval(let opUser, let groupJoinOption):
             var desc = ""
             switch groupJoinOption {
             case .forbid:
@@ -108,9 +83,9 @@ public class MessageListHelper {
             case .any:
                 desc = LocalizedChatString("GroupProfileAutoApproval")
             }
-            return String(format: LocalizedChatString("MessageTipsEditGroupAddOptFormat"), groupJoinApprovalOperator, desc)
+            return String(format: LocalizedChatString("MessageTipsEditGroupAddOptFormat"), displayName(opUser), desc)
             
-        case .changeInviteToGroupApproval(_, let groupInviteApprovalOperator, let groupInviteOption):
+        case .changeInviteToGroupApproval(let opUser, let groupInviteOption):
             var desc = ""
             switch groupInviteOption {
             case .forbid:
@@ -120,10 +95,7 @@ public class MessageListHelper {
             case .any:
                 desc = LocalizedChatString("GroupProfileAutoApproval")
             }
-            return String(format: LocalizedChatString("MessageTipsEditGroupInviteOptFormat"), groupInviteApprovalOperator, desc)
-            
-        case .recallMessage:
-            return ""
+            return String(format: LocalizedChatString("MessageTipsEditGroupInviteOptFormat"), displayName(opUser), desc)
         }
     }
     
@@ -135,14 +107,28 @@ public class MessageListHelper {
     public static func getMessageAbstract(_ messageInfo: MessageInfo?, showMergedTitle: Bool = false) -> String {
         guard let messageInfo = messageInfo else { return "" }
         
+        // Show recall status instead of original content for revoked messages
+        if messageInfo.status == .revoked {
+            if messageInfo.isSentBySelf {
+                return LocalizedChatString("MessageTipsYouRecallMessage")
+            } else if messageInfo.conversationType == .c2c {
+                return LocalizedChatString("MessageTipsOthersRecallMessage")
+            } else {
+                return String(format: LocalizedChatString("MessageTipsRecallMessageFormat"), messageInfo.from.userID)
+            }
+        }
+        
         switch messageInfo.messageType {
         case .text:
-            return messageInfo.messageBody?.text ?? ""
+            if case .text(let payload) = messageInfo.messagePayload {
+                return payload.text
+            }
+            return ""
             
         case .image:
             return LocalizedChatString("MessageTypeImage")
             
-        case .sound:
+        case .audio:
             return LocalizedChatString("MessageTypeVoice")
             
         case .file:
@@ -155,7 +141,8 @@ public class MessageListHelper {
             return LocalizedChatString("MessageTypeAnimateEmoji")
             
         case .custom:
-            if let data = messageInfo.messageBody?.customMessage?.data,
+            if case .custom(let payload) = messageInfo.messagePayload,
+               let data = payload.customData.data(using: .utf8),
                let customInfo = ChatUtil.jsonData2Dictionary(jsonData: data),
                let businessID = customInfo["businessID"] as? String,
                businessID == "group_create"
@@ -167,14 +154,15 @@ public class MessageListHelper {
             }
             return LocalizedChatString("MessageTypeCustom")
             
-        case .system:
-            if let systemInfo = messageInfo.messageBody?.systemMessage {
-                return getSystemInfoDisplayString(systemInfo)
+        case .tips:
+            if case .tips(let payload) = messageInfo.messagePayload {
+                return getGroupTipsDisplayString(payload.groupTips)
             }
             return ""
             
         case .merged:
-            if showMergedTitle, let title = messageInfo.messageBody?.mergedMessage?.title, !title.isEmpty {
+            if showMergedTitle, case .merged(let payload) = messageInfo.messagePayload, !payload.title.isEmpty {
+                let title = payload.title
                 return title
             }
             return LocalizedChatString("MessageTypeMergedHistory")
@@ -186,22 +174,22 @@ public class MessageListHelper {
     
     static func shouldShowReadReceipt(message: MessageInfo, isInMergedDetailView: Bool = false) -> Bool {
         return !isInMergedDetailView &&
-            message.isSelf &&
+            message.isSentBySelf &&
             message.needReadReceipt &&
             message.status == .sendSuccess &&
-            message.messageType != .system
+            message.messageType != .tips
     }
     
     static func getReceiptIconName(message: MessageInfo) -> String {
-        if message.groupID == nil || message.groupID?.isEmpty == true {
-            if message.receipt?.isPeerRead == true {
+        if message.conversationType != .group {
+            if message.readReceiptInfo?.isPeerRead == true {
                 return "check-all-highlight"
             } else {
                 return "check"
             }
         } else {
-            let readCount = message.receipt?.readCount ?? 0
-            let unreadCount = message.receipt?.unreadCount ?? 0
+            let readCount = message.readReceiptInfo?.readCount ?? 0
+            let unreadCount = message.readReceiptInfo?.unreadCount ?? 0
             let totalCount = readCount + unreadCount
 
             if readCount == 0 {
@@ -214,24 +202,21 @@ public class MessageListHelper {
         }
     }
     
-    // MARK: - 消息转发相关
+    // MARK: - Message Forwarding
     
-    /// 生成消息摘要（用于合并转发）
+    /// Generates a message abstract for merged forwarding.
     public static func getMessageAbstractForForward(_ message: MessageInfo) -> String {
         let senderName: String
-        if let nickname = message.sender.nickname, !nickname.isEmpty {
+        if let nickname = message.from.nickname, !nickname.isEmpty {
             senderName = nickname
         } else {
-            senderName = message.sender.userID
+            senderName = message.from.userID
         }
         let content = getMessageAbstract(message)
         return alignEmojiString(userName: senderName, text: content)
     }
     
-    /// 对齐 Emoji 和用户名（处理中文字符对齐问题）
     private static func alignEmojiString(userName: String, text: String) -> String {
-        // 简化版本：直接返回 "用户名: 内容"
-        // 如果需要复杂的对齐逻辑（如Android），后续可以增强
         return "\(userName): \(text)"
     }
     
@@ -253,11 +238,11 @@ public class MessageListHelper {
             var seenSenders: Set<String> = []
             
             for message in messages {
-                let sender = message.sender.userID
+            let sender = message.from.userID
                 if !seenSenders.contains(sender) {
                     seenSenders.insert(sender)
                     // Use nickName, fallback to sender ID
-                    let name = message.sender.nickname ?? sender
+                    let name = message.from.nickname ?? sender
                     senderNames.append(name)
                 }
                 // Only need at most 2 senders for C2C
@@ -279,11 +264,24 @@ public class MessageListHelper {
         }
     }
     
-    /// 生成合并转发的摘要列表（最多4条）
+    /// Generates merged forward abstract list, capped at four messages.
     public static func generateAbstractList(messages: [MessageInfo]) -> [String] {
         let maxAbstracts = 4
         return messages.prefix(maxAbstracts).map { message in
             getMessageAbstractForForward(message)
         }
+    }
+
+    private static func displayName(_ member: GroupMember) -> String {
+        if let nameCard = member.nameCard, !nameCard.isEmpty {
+            return nameCard
+        }
+        if let remark = member.friendRemark, !remark.isEmpty {
+            return remark
+        }
+        if let nickname = member.nickname, !nickname.isEmpty {
+            return nickname
+        }
+        return member.userID
     }
 }

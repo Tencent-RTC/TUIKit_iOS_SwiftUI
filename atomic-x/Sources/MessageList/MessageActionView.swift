@@ -6,6 +6,11 @@ import Kingfisher
 import AtomicXCore
 import UIKit
 
+private func messageActionDate(from timestamp: Int64?) -> Date? {
+    guard let timestamp = timestamp else { return nil }
+    return Date(timeIntervalSince1970: TimeInterval(timestamp))
+}
+
 private struct MessageActionConfigProtocolKey: EnvironmentKey {
     static let defaultValue: MessageActionConfigProtocol = ChatMessageListConfig()
 }
@@ -138,11 +143,13 @@ enum MenuButtonConfig {
                 label: LocalizedChatString("Copy"),
                 shouldShow: { message in
                     guard let message = message else { return false }
-                    // Violation messages cannot be copied
+                    // Copy is only meaningful for text payloads, and violation messages cannot be copied.
+                    guard message.messageType == .text else { return false }
                     return message.status != .violation
                 },
                 actionHandler: { message, menuManager, _ in
-                    if let text = message?.messageBody?.text {
+                    if case .text(let payload) = message?.messagePayload {
+                        let text = payload.text
                         UIPasteboard.general.string = text
                         WindowToastManager.shared.show(LocalizedChatString("copied"), type: .success, duration: 3)
                     }
@@ -155,10 +162,11 @@ enum MenuButtonConfig {
                 label: LocalizedChatString("Revoke"),
                 shouldShow: { message in
                     guard let message = message else { return false }
-                    guard message.isSelf else { return false }
-                    // Violation messages cannot be revoked
-                    guard message.status != .violation else { return false }
-                    guard let messageDate = message.timestamp else { return false }
+                    guard message.isSentBySelf else { return false }
+                    // Only successfully sent messages can be revoked; failed or violation
+                    // messages are removed via Delete instead.
+                    guard message.status == .sendSuccess else { return false }
+                    guard let messageDate = messageActionDate(from: message.timestamp) else { return false }
                     let currentTime = Date()
                     let timeDifference = currentTime.timeIntervalSince(messageDate)
                     let twoMinutesInSeconds: TimeInterval = 2 * 60
@@ -167,7 +175,7 @@ enum MenuButtonConfig {
                 actionHandler: { message, menuManager, messageActionStore in
                     guard let message = message else { return }
                     menuManager.hideMenu()
-                    messageActionStore.recallMessage(completion: { _ in })
+                    messageActionStore.revoke(completion: { _ in })
                 }
             ),
             ButtonConfig(
@@ -178,7 +186,7 @@ enum MenuButtonConfig {
                 actionHandler: { message, menuManager, messageActionStore in
                     guard let message = message else { return }
                     menuManager.hideMenu()
-                    messageActionStore.deleteMessage(completion: { _ in })
+                    messageActionStore.delete(completion: { _ in })
                 }
             ),
             ButtonConfig(
@@ -187,7 +195,9 @@ enum MenuButtonConfig {
                 label: LocalizedChatString("Info"),
                 shouldShow: { message in
                     guard let message = message else { return false }
-                    return message.groupID != nil && message.needReadReceipt && message.isSelf
+                    // Read receipt info is only meaningful for successfully delivered messages.
+                    guard message.status == .sendSuccess else { return false }
+                    return message.conversationType == .group && message.needReadReceipt && message.isSentBySelf
                 },
                 actionHandler: { message, menuManager, messageActionStore in
                     guard let message = message else { return }
@@ -224,9 +234,9 @@ enum MenuButtonConfig {
                 label: LocalizedChatString("ConvertToText"),
                 shouldShow: { message in
                     guard let message = message else { return false }
-                    // Only show for sound messages that are sent successfully and ASR bubble is not showing
+                    // Only show for audio messages that are sent successfully and ASR bubble is not showing
                     // Violation messages cannot be converted to text
-                    guard message.messageType == .sound else { return false }
+                    guard message.messageType == .audio else { return false }
                     guard message.status == .sendSuccess else { return false }
                     // Show "ConvertToText" menu item if ASR bubble is not expanded
                     return !asrDisplayManager.isExpanded(message.msgID)
@@ -339,8 +349,10 @@ class MessageMenuManager: ObservableObject {
         let safeAreaTop = safeInsets.top
         let config = ChatMessageListConfig()
         let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: config, customActions: customActions).count
-        // Violation messages should not show reaction picker
-        let hasReactionPicker = ((config as? MessageListConfigProtocol)?.isSupportReaction ?? false) && message.status != .violation
+        // Reaction picker is only shown for successfully delivered messages; keep this in sync
+        // with MenuContentView so the menu height does not reserve empty space for failed /
+        // violation / pending messages.
+        let hasReactionPicker = ((config as? MessageListConfigProtocol)?.isSupportReaction ?? false) && message.status == .sendSuccess
         let dynamicMenuHeight = MessageMenuConfig.calculateMenuDimensions(buttonCount: buttonCount, hasReactionPicker: hasReactionPicker).height
         let hasEnoughSpaceAbove = bubbleFrame.minY - safeAreaTop >= dynamicMenuHeight + 40
         menuData = MessageMenuData(
@@ -500,8 +512,10 @@ struct MessageActionView: View {
 
         public func calculateMenuPosition(screenGeometry: GeometryProxy) -> MenuPositionParams {
             let buttonCount = MenuButtonConfig.getVisibleButtons(for: message, style: style, customActions: customActions, asrDisplayManager: asrDisplayManager, translationDisplayManager: translationDisplayManager).count
-            // Violation messages should not show reaction picker
-            let hasReactionPicker = ((style as? MessageListConfigProtocol)?.isSupportReaction ?? false) && message.status != .violation
+            // Reaction picker is only shown for successfully delivered messages; keep this in sync
+            // with MenuContentView so the menu height does not reserve empty space for failed /
+            // violation / pending messages.
+            let hasReactionPicker = ((style as? MessageListConfigProtocol)?.isSupportReaction ?? false) && message.status == .sendSuccess
             let dimensions = MessageMenuConfig.calculateMenuDimensions(buttonCount: buttonCount, hasReactionPicker: hasReactionPicker)
             let menuWidth = dimensions.width
             let dynamicMenuHeight = dimensions.height
@@ -945,10 +959,11 @@ struct MessageActionView: View {
                     Spacer().frame(height: MessageMenuConfig.arrowHeight)
                 }
 
-                // Reaction Emoji Picker (if reaction is supported and message is not violation)
+                // Reaction Emoji Picker. Reaction is only valid on successfully delivered
+                // messages: failed / violation messages should not expose this entry.
                 if let config = style as? MessageListConfigProtocol,
                    config.isSupportReaction,
-                   menuManager.menuData.message?.status != .violation
+                   menuManager.menuData.message?.status == .sendSuccess
                 {
                     ReactionEmojiPicker(
                         onEmojiClick: { emoji in
@@ -962,20 +977,20 @@ struct MessageActionView: View {
 
                             if hasReacted {
                                 // Remove reaction
-                                messageActionStore.removeMessageReaction(
+                                messageActionStore.removeReaction(
                                     reactionID: emojiName,
-                                    completion: nil
+                                    completion: { _ in }
                                 )
                             } else {
                                 // Add reaction
-                                messageActionStore.addMessageReaction(
+                                messageActionStore.addReaction(
                                     reactionID: emojiName,
                                     completion: { _ in
                                         // Notify MessageList to scroll if this is the last message
                                         NotificationCenter.default.post(
                                             name: NSNotification.Name("reactionAdded"),
                                             object: nil,
-                                            userInfo: ["msgID": message.msgID ?? ""]
+                                            userInfo: ["msgID": message.msgID]
                                         )
                                     }
                                 )
@@ -1030,20 +1045,20 @@ struct MessageActionView: View {
 
                             if hasReacted {
                                 // Remove reaction
-                                messageActionStore.removeMessageReaction(
+                                messageActionStore.removeReaction(
                                     reactionID: emojiName,
-                                    completion: nil
+                                    completion: { _ in }
                                 )
                             } else {
                                 // Add reaction
-                                messageActionStore.addMessageReaction(
+                                messageActionStore.addReaction(
                                     reactionID: emojiName,
                                     completion: { _ in
                                         // Notify MessageList to scroll if this is the last message
                                         NotificationCenter.default.post(
                                             name: NSNotification.Name("reactionAdded"),
                                             object: nil,
-                                            userInfo: ["msgID": message.msgID ?? ""]
+                                            userInfo: ["msgID": message.msgID]
                                         )
                                     }
                                 )

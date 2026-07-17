@@ -221,6 +221,30 @@ extension AlbumPicker {
     
     // MARK: - Business Logic Methods
     internal func loadCameraRoll() {
+        // If we don't yet have access to the photo library, request it first and only
+        // populate the grid once the user has responded. Without this the first call to
+        // `PHAsset.fetchAssets` returns an empty result and the UI is stuck showing nothing
+        // even after the user grants permission.
+        let status: PHAuthorizationStatus
+        if #available(iOS 14, *) {
+            status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        } else {
+            status = PHPhotoLibrary.authorizationStatus()
+        }
+
+        if status == .notDetermined {
+            imageManager.requestAuthorization {
+                self.fetchCameraRollAssets()
+            }
+        } else {
+            // Authorized, limited, denied or restricted: trigger a fetch so the grid renders
+            // (empty in the denied case). For denied access the system "Settings" deep-link
+            // UI is responsible for re-authorization on subsequent entries.
+            fetchCameraRollAssets()
+        }
+    }
+
+    private func fetchCameraRollAssets() {
         imageManager.getCameraRollAlbum(needFetchAssets: true, filter: albumMode) { model in
             if let model = model {
                 DispatchQueue.main.async {
@@ -229,7 +253,7 @@ extension AlbumPicker {
                     self.albumModel.collection = model.collection
                     self.albumModel.options = model.options
                     self.albumModel.isCameraRoll = model.isCameraRoll
-                    
+
                     if let result = model.result {
                         self.imageManager.getAssets(from: result) { assetModels in
                             DispatchQueue.main.async {
@@ -240,7 +264,7 @@ extension AlbumPicker {
                 }
             }
         }
-        
+
         imageManager.getAllAlbums(needFetchAssets: false, filter: albumMode) { albums in
             DispatchQueue.main.async {
                 self.albums = albums

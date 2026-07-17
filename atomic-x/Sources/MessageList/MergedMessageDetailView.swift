@@ -1,31 +1,35 @@
 import AtomicXCore
-import Combine
 import SwiftUI
 
 struct MergedMessageDetailView: View {
     @EnvironmentObject var themeState: ThemeState
     @Environment(\.presentationMode) var presentationMode
     @StateObject private var sharedAudioPlayer = AudioPlayer.create()
+    // Each AudioMessageView reads the "currently playing message" flag from this manager and
+    // animates accordingly. If we let MessageView create its own AudioPlaybackManager (its
+    // default value), every re-render produces a fresh instance whose currentPlayingMsgID
+    // is always nil, so the playing animation never starts in the merged detail view.
+    @StateObject private var audioPlaybackManager = AudioPlaybackManager()
+    @StateObject private var messageStoreHolder = MergedMessageStoreHolder()
     @State private var subMessages: [MessageInfo] = []
     @State private var isLoading = true
-    @State private var cancellables = Set<AnyCancellable>()
-    
+    @State private var mergedActionStore: MessageActionStore? = nil
+
     let mergedMessage: MessageInfo
     let depth: Int
-    private let messageStore: MessageListStore
-    
+
+    private var messageStore: MessageListStore { messageStoreHolder.store }
+
     init(mergedMessage: MessageInfo, depth: Int = 0) {
         self.mergedMessage = mergedMessage
         self.depth = depth
-        // Create a store for merged messages
-        self.messageStore = MessageListStore.create(
-            conversationID: "",
-            messageListType: .merged
-        )
     }
     
     private var title: String {
-        return mergedMessage.messageBody?.mergedMessage?.title ?? LocalizedChatString("")
+        if case .merged(let payload) = mergedMessage.messagePayload {
+            return payload.title
+        }
+        return LocalizedChatString("")
     }
     
     var body: some View {
@@ -64,7 +68,6 @@ struct MergedMessageDetailView: View {
             }
         }
         .onAppear {
-            setupSubscription()
             loadSubMessages()
         }
     }
@@ -72,12 +75,13 @@ struct MergedMessageDetailView: View {
     private var messageListView: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                ForEach(subMessages) { message in
+                ForEach(subMessages.filter { $0.status != .revoked }) { message in
                     MessageView(
                         message: message,
                         messageListStore: messageStore,
                         conversationID: "",
                         audioPlayer: sharedAudioPlayer,
+                        audioPlaybackManager: audioPlaybackManager,
                         onUserClick: nil,
                         parentMessageList: subMessages,
                         displayMode: .merged
@@ -103,52 +107,50 @@ struct MergedMessageDetailView: View {
         }
     }
     
-    private func setupSubscription() {
-        messageStore.state
-            .subscribe(StatePublisherSelector(keyPath: \.messageList))
-            .receive(on: DispatchQueue.main)
-            .sink { messageList in
-                self.subMessages = messageList
-                self.isLoading = false
-                // Fetch reactions for sub messages
-                if !messageList.isEmpty {
-                    fetchMessageReactions(messageList)
-                }
-            }
-            .store(in: &cancellables)
-    }
-    
     private func loadSubMessages() {
-        var option = MessageFetchOption()
-        option.message = mergedMessage
-        option.direction = .Older
-        option.pageCount = 100
-        
-        messageStore.fetchMessageList(with: option) { result in
-            switch result {
-            case .success:
-                break
-            case .failure(let error):
-                print(">>>>> MergedMessageDetailView fetch failed: \(error.code), \(error.message)")
+        let actionStore = MessageActionStore.create(message: mergedMessage)
+        mergedActionStore = actionStore // Keep store alive until callback fires
+        actionStore.downloadMergedMessageList(completion: MergedMessageDetailCompletionHandler(
+            onSuccess: { messageList in
+                DispatchQueue.main.async {
+                    self.subMessages = messageList
+                    self.isLoading = false
+                    self.mergedActionStore = nil
+                }
+            },
+            onFailure: { code, desc in
+                print(">>>>> MergedMessageDetailView downloadMergedMessageList failed: \(code), \(desc)")
                 DispatchQueue.main.async {
                     self.isLoading = false
+                    self.mergedActionStore = nil
                 }
             }
-        }
+        ))
     }
+}
 
-    private func fetchMessageReactions(_ messages: [MessageInfo]) {
-        messageStore.fetchMessageReactions(
-            messages,
-            maxUserCountPerReaction: 3,
-            completion: { result in
-                switch result {
-                case .success:
-                    break
-                case .failure(let error):
-                    print(">>>>> MergedMessageDetailView fetch reactions failed: \(error.code), \(error.message)")
-                }
-            }
-        )
+/// See `MessageListStoreHolder` in `MessageList.swift`. The merged message detail
+/// view is a SwiftUI struct, so creating `MessageListStore` directly in `init`
+/// would spawn a new IM SDK listener on every parent body re-render and leave
+/// the SDK with dangling pointers in its listener hash table.
+private final class MergedMessageStoreHolder: ObservableObject {
+    let store: MessageListStore = MessageListStore.create(conversationID: "")
+}
+
+private final class MergedMessageDetailCompletionHandler: MergedMessageListCompletionHandler {
+    private let onSuccessHandler: ([MessageInfo]) -> Void
+    private let onFailureHandler: (Int, String) -> Void
+    
+    init(onSuccess: @escaping ([MessageInfo]) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessHandler = onSuccess
+        self.onFailureHandler = onFailure
+    }
+    
+    func onSuccess(messageList: [MessageInfo]) {
+        onSuccessHandler(messageList)
+    }
+    
+    func onFailure(code: Int, desc: String) {
+        onFailureHandler(code, desc)
     }
 }

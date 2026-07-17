@@ -52,10 +52,10 @@ public struct MessageReadReceiptView: View {
         .onReceive(messageActionStore.state.subscribe(StatePublisherSelector(keyPath: \.hasMoreReadMembers))) { hasMore in
             hasMoreReadMembers = hasMore
         }
-        .onReceive(messageActionStore.state.subscribe(StatePublisherSelector(keyPath: \.unReadMemberList))) { unReadMembers in
+        .onReceive(messageActionStore.state.subscribe(StatePublisherSelector(keyPath: \.unreadMemberList))) { unReadMembers in
             unReadMemberList = unReadMembers
         }
-        .onReceive(messageActionStore.state.subscribe(StatePublisherSelector(keyPath: \.hasMoreUnReadMembers))) { hasMore in
+        .onReceive(messageActionStore.state.subscribe(StatePublisherSelector(keyPath: \.hasMoreUnreadMembers))) { hasMore in
             hasMoreUnReadMembers = hasMore
         }
     }
@@ -78,37 +78,37 @@ public struct MessageReadReceiptView: View {
     
     @ViewBuilder
     private var messageContent: some View {
-        if let messageBody = message.messageBody {
-            switch message.messageType {
-            case .text:
+        if let payload = message.messagePayload {
+            switch payload {
+            case .text(let payload):
                 TextMessageView(
-                    messageBody: messageBody,
+                    payload: payload,
                     message: message,
                     isLeft: false,
                     isSelf: true,
                     shouldHighlight: false
                 )
                 
-            case .image:
+            case .image(let payload):
                 ImageMessageView(
-                    messageBody: messageBody,
+                    payload: payload,
                     message: message,
                     messageListStore: messageListStore,
                     onImageTap: {}
                 )
                 
-            case .video:
+            case .video(let payload):
                 VideoMessageView(
-                    messageBody: messageBody,
+                    payload: payload,
                     message: message,
                     messageListStore: messageListStore,
                     onVideoTap: {},
                     onPlayVideo: {}
                 )
                 
-            case .sound:
+            case .audio(let payload):
                 ReadOnlyAudioMessageView(
-                    messageBody: messageBody,
+                    payload: payload,
                     isSelf: true
                 )
                 .padding(.horizontal, 16)
@@ -116,9 +116,9 @@ public struct MessageReadReceiptView: View {
                 .background(themeState.colors.bgColorBubbleOwn)
                 .cornerRadius(16)
                 
-            case .file:
+            case .file(let payload):
                 ReadOnlyFileMessageView(
-                    messageBody: messageBody,
+                    payload: payload,
                     isSelf: true
                 )
                 .padding(.horizontal, 16)
@@ -144,13 +144,13 @@ public struct MessageReadReceiptView: View {
                     .background(themeState.colors.bgColorBubbleOwn)
                     .cornerRadius(16)
                 
-            case .merged:
-                if let title = messageBody.mergedMessage?.title {
+            case .merged(let payload):
+                if !payload.title.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         Image(systemName: "doc.on.doc.fill")
                             .font(.system(size: 20))
                             .foregroundColor(themeState.colors.textColorLink)
-                        Text(title)
+                        Text(payload.title)
                             .font(.system(size: 14, weight: .medium))
                             .foregroundColor(themeState.colors.textColorPrimary)
                     }
@@ -297,7 +297,7 @@ public struct MessageReadReceiptView: View {
     }
     
     private func loadInitialData() {
-        messageActionStore.fetchMessageReadMembers(count: 20) { result in
+        messageActionStore.loadReadMembers(count: 20) { result in
             switch result {
             case .success:
                 break
@@ -306,7 +306,7 @@ public struct MessageReadReceiptView: View {
             }
         }
         
-        messageActionStore.fetchMessageUnreadMembers(count: 20) { result in
+        messageActionStore.loadUnreadMembers(count: 20) { result in
             switch result {
             case .success:
                 break
@@ -317,7 +317,7 @@ public struct MessageReadReceiptView: View {
     }
     
     private func loadMoreMembers(isRead: Bool) {
-        messageActionStore.fetchMoreMessageMembers(isRead: isRead) { result in
+        messageActionStore.loadMoreMembers(isRead: isRead) { result in
             switch result {
             case .success:
                 break
@@ -328,7 +328,7 @@ public struct MessageReadReceiptView: View {
     }
     
     private var formattedDate: String {
-        guard let timestamp = message.timestamp else {
+        guard let timestamp = date(from: message.timestamp) else {
             return ""
         }
         
@@ -338,13 +338,18 @@ public struct MessageReadReceiptView: View {
     }
     
     private var messageTimeString: String {
-        guard let timestamp = message.timestamp else {
+        guard let timestamp = date(from: message.timestamp) else {
             return "15:24"
         }
         
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: timestamp)
+    }
+
+    private func date(from timestamp: Int64?) -> Date? {
+        guard let timestamp = timestamp else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(timestamp))
     }
 }
 
@@ -370,11 +375,11 @@ struct RoundedCorner: Shape {
 
 private struct ReadOnlyAudioMessageView: View {
     @EnvironmentObject var themeState: ThemeState
-    let messageBody: MessageBody
+    let payload: AudioMessagePayload
     let isSelf: Bool
     
     var body: some View {
-        let duration = messageBody.soundDuration
+        let duration = payload.audioDuration
         let displayText = formatDuration(duration)
         
         HStack(spacing: 12) {
@@ -416,23 +421,23 @@ private struct ReadOnlyAudioMessageView: View {
 
 private struct ReadOnlyFileMessageView: View {
     @EnvironmentObject var themeState: ThemeState
-    let messageBody: MessageBody
+    let payload: FileMessagePayload
     let isSelf: Bool
     
     var body: some View {
         HStack {
-            Image(systemName: FilePreviewManager.fileTypeIcon(for: messageBody.fileName ?? "unknown"))
+            Image(systemName: FilePreviewManager.fileTypeIcon(for: payload.fileName ?? "unknown"))
                 .font(.system(size: 30))
                 .foregroundColor(isSelf ? themeState.colors.textColorPrimary : themeState.colors.buttonColorPrimaryDefault)
                 .frame(width: 40, height: 40)
             
             VStack(alignment: .leading, spacing: 4) {
-                Text(messageBody.fileName ?? LocalizedChatString("UnknownFile"))
+                Text(payload.fileName ?? LocalizedChatString("UnknownFile"))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundColor(themeState.colors.textColorPrimary)
                     .lineLimit(1)
  
-                Text(FilePreviewManager.formatFileSize(Int64(messageBody.fileSize)))
+                Text(FilePreviewManager.formatFileSize(Int64(payload.fileSize)))
                     .font(.system(size: 12))
                     .foregroundColor(themeState.colors.textColorSecondary)
             }

@@ -1,17 +1,25 @@
 import AtomicXCore
 import SwiftUI
 
-// MARK: - GroupMember Extension
+private func displayName(for member: GroupMember) -> String {
+    if let nameCard = member.nameCard, !nameCard.isEmpty {
+        return nameCard
+    } else if let friendRemark = member.friendRemark, !friendRemark.isEmpty {
+        return friendRemark
+    } else if let nickname = member.nickname, !nickname.isEmpty {
+        return nickname
+    } else {
+        return member.userID
+    }
+}
 
-extension GroupMember {
-    var displayName: String {
-        if let nameCard = nameCard, !nameCard.isEmpty {
-            return nameCard
-        } else if let nickname = nickname, !nickname.isEmpty {
-            return nickname
-        } else {
-            return userID
-        }
+private func displayName(for contact: ContactInfo) -> String {
+    if let friendRemark = contact.friendRemark, !friendRemark.isEmpty {
+        return friendRemark
+    } else if let nickname = contact.nickname, !nickname.isEmpty {
+        return nickname
+    } else {
+        return contact.userID
     }
 }
 
@@ -39,19 +47,24 @@ public struct GroupChatSetting: View {
     @State private var isNotDisturb: Bool = false
     @State private var isPinned: Bool = false
     @State private var groupType: GroupType = .work
-    @State private var memberCount: UInt = 0
+    @State private var memberCount: Int = 0
     @State private var currentUserRole: GroupMemberRole = .member
     @State private var selfNameCard: String? = nil
     @State private var joinGroupApprovalType: GroupJoinOption = .forbid
-    @State private var inviteToGroupApprovalType: GroupJoinOption = .forbid
+    @State private var inviteToGroupApprovalType: GroupInviteOption = .forbid
     @State private var isAllMuted: Bool = false
     @State private var allMembers: [GroupMember] = []
     @State private var currentUserID: String = ""
-    @State private var settingStore: GroupSettingStore
+    private let groupStore: GroupStore
+    @State private var memberStore: GroupMemberStore
     @State private var conversationStore: ConversationListStore
     private let onSendMessageClick: (() -> Void)?
     private let onGroupDelete: (() -> Void)?
     private let onGroupMemberClick: ((String) -> Void)?
+
+    private var conversationID: String {
+        ChatUtil.getGroupConversationID(groupID)
+    }
 
     private enum PermissionActionSheetType {
         case joinOption
@@ -65,7 +78,8 @@ public struct GroupChatSetting: View {
         onGroupMemberClick: ((String) -> Void)? = nil
     ) {
         self.groupID = groupID
-        self.settingStore = GroupSettingStore.create(groupID: groupID)
+        self.groupStore = GroupStore.shared
+        self.memberStore = GroupMemberStore.create(groupID: groupID)
         self.onSendMessageClick = onSendMessageClick
         self.onGroupDelete = onGroupDelete
         self.onGroupMemberClick = onGroupMemberClick
@@ -82,7 +96,7 @@ public struct GroupChatSetting: View {
             GroupNameEditSheet(
                 currentName: groupName,
                 onSave: { newName in
-                    settingStore.updateGroupProfile(
+                    updateGroupProfile(
                         name: newName,
                         notice: nil,
                         avatar: nil,
@@ -103,8 +117,8 @@ public struct GroupChatSetting: View {
             GroupNameCardEditSheet(
                 currentNameCard: selfNameCard ?? "",
                 onSave: { newNameCard in
-                    settingStore.setSelfGroupNameCard(
-                        nameCard: newNameCard.isEmpty ? nil : newNameCard,
+                    memberStore.setSelfNameCard(
+                        nameCard: newNameCard,
                         completion: { result in
                             switch result {
                             case .success:
@@ -120,7 +134,7 @@ public struct GroupChatSetting: View {
         }
         .background(
             NavigationLink(
-                destination: GroupNoticeDetailView(settingStore: settingStore),
+                destination: GroupNoticeDetailView(groupID: groupID, groupStore: groupStore),
                 isActive: $showingGroupNotice
             ) {
                 EmptyView()
@@ -129,7 +143,7 @@ public struct GroupChatSetting: View {
         )
         .background(
             NavigationLink(
-                destination: GroupManagementView(settingStore: settingStore),
+                destination: GroupManagementView(groupID: groupID, groupStore: groupStore, memberStore: memberStore),
                 isActive: $showingGroupManagement
             ) {
                 EmptyView()
@@ -138,7 +152,7 @@ public struct GroupChatSetting: View {
         )
         .background(
             NavigationLink(
-                destination: AddGroupMemberView(settingStore: settingStore)
+                destination: AddGroupMemberView(memberStore: memberStore)
                     .environmentObject(themeState),
                 isActive: $showingAddMember
             ) {
@@ -148,7 +162,7 @@ public struct GroupChatSetting: View {
         )
         .background(
             NavigationLink(
-                destination: GroupMemberListView(settingStore: settingStore, onGroupMemberClick: onGroupMemberClick),
+                destination: GroupMemberListView(groupStore: groupStore, memberStore: memberStore, onGroupMemberClick: onGroupMemberClick),
                 isActive: $showingGroupMembers
             ) {
                 EmptyView()
@@ -168,15 +182,11 @@ public struct GroupChatSetting: View {
                 }
             }
         )
-        .background(
-            NavigationLink(
-                destination: TransferOwnershipView(settingStore: settingStore),
-                isActive: $showingTransferOwnership
-            ) {
-                EmptyView()
+        .sheet(isPresented: $showingTransferOwnership) {
+            NavigationView {
+                TransferOwnershipView(groupID: groupID, groupStore: groupStore, memberStore: memberStore)
             }
-            .hidden()
-        )
+        }
         .actionSheet(isPresented: $showingPermissionActionSheet) {
             createPermissionActionSheet(for: permissionActionSheetType)
         }
@@ -189,7 +199,7 @@ public struct GroupChatSetting: View {
                     imageUrlList: createGroupAvatarUrlList(),
                     column: 4,
                     onComplete: { selectedImageUrl in
-                        settingStore.updateGroupProfile(
+                        updateGroupProfile(
                             name: nil,
                             notice: nil,
                             avatar: selectedImageUrl,
@@ -210,46 +220,21 @@ public struct GroupChatSetting: View {
             }
             .hidden()
         )
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.groupName))) { groupName in
-            self.groupName = groupName
+        .onReceive(groupStore.state.subscribe(StatePublisherSelector(keyPath: \GroupState.joinedGroupList))) { joinedGroupList in
+            if let groupInfo = joinedGroupList.first(where: { $0.groupID == groupID }) {
+                applyGroupInfo(groupInfo)
+            }
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.avatarURL))) { avatar in
-            self.avatar = avatar
+        .onReceive(memberStore.state.subscribe(StatePublisherSelector(keyPath: \GroupMemberState.memberList))) { memberList in
+            applyMemberList(memberList)
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.notice))) { notice in
-            self.notice = notice
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.isNotDisturb))) { isNotDisturb in
-            self.isNotDisturb = isNotDisturb
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.isPinned))) { isPinned in
-            self.isPinned = isPinned
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.groupType))) { groupType in
-            self.groupType = groupType
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.memberCount))) { memberCount in
-            self.memberCount = memberCount
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.currentUserRole))) { currentUserRole in
-            self.currentUserRole = currentUserRole
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.selfNameCard))) { selfNameCard in
-            self.selfNameCard = selfNameCard
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.joinGroupApprovalType))) { joinGroupApprovalType in
-            self.joinGroupApprovalType = joinGroupApprovalType
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.inviteToGroupApprovalType))) { inviteToGroupApprovalType in
-            self.inviteToGroupApprovalType = inviteToGroupApprovalType
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.isAllMuted))) { isAllMuted in
-            self.isAllMuted = isAllMuted
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
-            self.allMembers = allMembers
+        .onReceive(conversationStore.state.subscribe(StatePublisherSelector(keyPath: \ConversationListState.conversationList))) { conversationList in
+            if let conversationInfo = conversationList.first(where: { $0.conversationID == conversationID }) {
+                applyConversationInfo(conversationInfo)
+            }
         }
         .onAppear {
+            currentUserID = LoginStore.shared.state.value.loginUserInfo?.userID ?? ""
             fetchInitialInfo()
         }
     }
@@ -329,7 +314,39 @@ public struct GroupChatSetting: View {
         let group = DispatchGroup()
         var hasError = false
         group.enter()
-        settingStore.fetchGroupInfo(completion: { result in
+        groupStore.getGroupInfo(
+            groupID: groupID,
+            completion: GroupInfoHandler(
+                onSuccess: { groupInfo in
+                    DispatchQueue.main.async {
+                        applyGroupInfo(groupInfo)
+                    }
+                    group.leave()
+                },
+                onFailure: { _, _ in
+                    hasError = true
+                    group.leave()
+                }
+            )
+        )
+        group.enter()
+        conversationStore.getConversationInfo(
+            conversationID: conversationID,
+            completion: GroupConversationInfoHandler(
+                onSuccess: { conversationInfo in
+                    DispatchQueue.main.async {
+                        applyConversationInfo(conversationInfo)
+                    }
+                    group.leave()
+                },
+                onFailure: { _, _ in
+                    hasError = true
+                    group.leave()
+                }
+            )
+        )
+        group.enter()
+        memberStore.loadMembers(roleList: [.all], completion: { result in
             switch result {
             case .success:
                 group.leave()
@@ -339,27 +356,7 @@ public struct GroupChatSetting: View {
             }
         })
         group.enter()
-        conversationStore.fetchConversationInfo(ChatUtil.getGroupConversationID(groupID), completion: { result in
-            switch result {
-            case .success:
-                group.leave()
-            case .failure:
-                hasError = true
-                group.leave()
-            }
-        })
-        group.enter()
-        settingStore.fetchGroupMemberList(role: .all, completion: { result in
-            switch result {
-            case .success:
-                group.leave()
-            case .failure:
-                hasError = true
-                group.leave()
-            }
-        })
-        group.enter()
-        settingStore.fetchSelfMemberInfo(completion: { result in
+        groupStore.loadJoinedGroups(completion: { result in
             switch result {
             case .success:
                 group.leave()
@@ -390,7 +387,8 @@ public struct GroupChatSetting: View {
                         title: LocalizedChatString("ProfileMessageDoNotDisturb"),
                         isOn: $isNotDisturb,
                         onToggle: { value in
-                            conversationStore.muteConversation(ChatUtil.getGroupConversationID(groupID), mute: isNotDisturb, completion: { result in
+                            let opt: ReceiveMessageOption = value ? .notNotify : .receive
+                            conversationStore.setReceiveMessageOpt(conversationID: conversationID, opt: opt, completion: { result in
                                 switch result {
                                 case .success:
                                     print("Successfully set group message do not disturb: \(value)")
@@ -406,7 +404,7 @@ public struct GroupChatSetting: View {
                         title: LocalizedChatString("ProfileStickyonTop"),
                         isOn: $isPinned,
                         onToggle: { value in
-                            conversationStore.pinConversation(ChatUtil.getGroupConversationID(groupID), pin: isPinned, completion: { result in
+                            conversationStore.pinConversation(conversationID: conversationID, pin: value, completion: { result in
                                 switch result {
                                 case .success:
                                     print("Successfully set pin group chat: \(value)")
@@ -652,7 +650,7 @@ public struct GroupChatSetting: View {
         }
     }
 
-    private func getAppovalOptionDisplayName(_ option: GroupJoinOption) -> String {
+    private func getAppovalOptionDisplayName(_ option: GroupInviteOption) -> String {
         switch option {
         case .forbid:
             return LocalizedChatString("GroupProfileInviteDisable")
@@ -727,7 +725,8 @@ public struct GroupChatSetting: View {
 
     private func setGroupPermission(_ option: GroupJoinOption, isJoinOption: Bool) {
         let actionType = isJoinOption ? LocalizedChatString("GroupProfileJoinType") : LocalizedChatString("GroupProfileInviteType")
-        let optionName = getAppovalOptionDisplayName(option)
+        let inviteOption = GroupInviteOption(rawValue: option.rawValue) ?? .forbid
+        let optionName = isJoinOption ? getJoinGroupDisplayName(option) : getAppovalOptionDisplayName(inviteOption)
         let completion: CompletionClosure = { result in
             switch result {
             case .success:
@@ -737,9 +736,9 @@ public struct GroupChatSetting: View {
             }
         }
         if isJoinOption {
-            settingStore.setGroupJoinOption(option: option, completion: completion)
+            groupStore.setJoinOption(groupID: groupID, option: option, completion: completion)
         } else {
-            settingStore.setGroupInviteOption(option: option, completion: completion)
+            groupStore.setInviteOption(groupID: groupID, option: inviteOption, completion: completion)
         }
     }
 
@@ -782,7 +781,7 @@ public struct GroupChatSetting: View {
     }
 
     private func clearHistory() {
-        conversationStore.clearConversationMessages(ChatUtil.getGroupConversationID(groupID), completion: { result in
+        conversationStore.clearConversationMessages(conversationID: conversationID, completion: { result in
             switch result {
             case .success:
                 print("Clear history message succeeded")
@@ -793,11 +792,11 @@ public struct GroupChatSetting: View {
     }
 
     private func deleteAndQuit() {
-        settingStore.quitGroup(completion: { result in
+        groupStore.quitGroup(groupID: groupID, completion: { result in
             switch result {
             case .success:
                 print("Quit group succeeded")
-                conversationStore.deleteConversation(ChatUtil.getGroupConversationID(groupID), completion: nil)
+                conversationStore.deleteConversation(conversationID: conversationID, completion: nil)
             case .failure:
                 print("Quit group failed")
             }
@@ -809,11 +808,11 @@ public struct GroupChatSetting: View {
     }
 
     private func dismissGroup() {
-        settingStore.dismissGroup(completion: { result in
+        groupStore.dismissGroup(groupID: groupID, completion: { result in
             switch result {
             case .success:
                 print("Dismiss group succeeded")
-                conversationStore.deleteConversation(ChatUtil.getGroupConversationID(groupID), completion: nil)
+                conversationStore.deleteConversation(conversationID: conversationID, completion: nil)
 
             case .failure:
                 print("Dismiss group failed")
@@ -832,6 +831,40 @@ public struct GroupChatSetting: View {
             "https://im.sdk.qcloud.com/download/tuikit-resource/group-avatar/group_avatar_\(index).png"
         }
     }
+
+    private func updateGroupProfile(name: String?, notice: String?, avatar: String?, completion: CompletionClosure?) {
+        var groupInfo = GroupInfo(groupID: groupID)
+        groupInfo.groupName = name
+        groupInfo.notification = notice
+        groupInfo.avatarURL = avatar
+        groupStore.updateProfile(groupInfo: groupInfo, completion: completion)
+    }
+
+    private func applyGroupInfo(_ groupInfo: GroupInfo) {
+        groupName = groupInfo.groupName ?? ""
+        avatar = groupInfo.avatarURL ?? ""
+        notice = groupInfo.notification ?? ""
+        groupType = groupInfo.groupType ?? .work
+        memberCount = groupInfo.memberCount ?? 0
+        currentUserRole = groupInfo.selfRole ?? currentUserRole
+        joinGroupApprovalType = groupInfo.joinOption ?? .forbid
+        inviteToGroupApprovalType = groupInfo.inviteOption ?? .forbid
+        isAllMuted = groupInfo.isAllMuted ?? false
+    }
+
+    private func applyMemberList(_ memberList: [GroupMember]) {
+        allMembers = memberList
+        memberCount = memberList.isEmpty ? memberCount : memberList.count
+        if let selfMember = memberList.first(where: { $0.userID == currentUserID }) {
+            selfNameCard = selfMember.nameCard
+            currentUserRole = selfMember.role
+        }
+    }
+
+    private func applyConversationInfo(_ conversationInfo: ConversationInfo) {
+        isNotDisturb = conversationInfo.receiveOption != .receive
+        isPinned = conversationInfo.isPinned
+    }
 }
 
 // MARK: - Group Member Preview Row
@@ -844,8 +877,12 @@ private struct GroupMemberPreviewRow: View {
     let onTap: () -> Void
 
     var body: some View {
+        // Avoid `.disabled()` because SwiftUI applies a system-wide reduced opacity to disabled
+        // buttons, which makes the current user's row look greyed out compared to the other
+        // members. Keep the row visually identical and gate the tap action instead.
+        let isTappable = canViewDetails && !isCurrentUser
         Button(action: {
-            if canViewDetails, !isCurrentUser {
+            if isTappable {
                 onTap()
             }
         }) {
@@ -856,7 +893,7 @@ private struct GroupMemberPreviewRow: View {
                 )
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
-                        Text(member.displayName)
+                        Text(displayName(for: member))
                             .font(.body)
                             .foregroundColor(themeState.colors.textColorPrimary)
                         if isCurrentUser {
@@ -884,7 +921,7 @@ private struct GroupMemberPreviewRow: View {
                     }
                 }
                 Spacer()
-                if canViewDetails && !isCurrentUser {
+                if isTappable {
                     Image(systemName: "chevron.right")
                         .font(.caption)
                         .foregroundColor(themeState.colors.textColorSecondary)
@@ -895,7 +932,7 @@ private struct GroupMemberPreviewRow: View {
             .background(themeState.colors.bgColorTopBar)
         }
         .buttonStyle(PlainButtonStyle())
-        .disabled(!canViewDetails || isCurrentUser)
+        .allowsHitTesting(isTappable)
     }
 }
 
@@ -910,7 +947,8 @@ private struct GroupEditView: View {
     @State private var notice: String = ""
     @State private var groupType: GroupType = .work
     @State private var currentUserRole: GroupMemberRole = .member
-    let settingStore: GroupSettingStore
+    let groupID: String
+    let groupStore: GroupStore
 
     var body: some View {
         NavigationView {
@@ -960,17 +998,13 @@ private struct GroupEditView: View {
                 .disabled(!hasAnyEditPermission)
             )
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.groupName))) { groupName in
-            self.groupName = groupName
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.notice))) { notice in
-            self.notice = notice
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.groupType))) { groupType in
-            self.groupType = groupType
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.currentUserRole))) { currentUserRole in
-            self.currentUserRole = currentUserRole
+        .onReceive(groupStore.state.subscribe(StatePublisherSelector(keyPath: \GroupState.joinedGroupList))) { joinedGroupList in
+            if let info = joinedGroupList.first(where: { $0.groupID == groupID }) {
+                self.groupName = info.groupName ?? ""
+                self.notice = info.notification ?? ""
+                self.groupType = info.groupType ?? .work
+                self.currentUserRole = info.selfRole ?? .member
+            }
         }
         .onAppear {
             editedName = groupName
@@ -1009,10 +1043,11 @@ private struct GroupEditView: View {
     private func saveChanges() {
         let nameToSave = canEditName ? (editedName.isEmpty ? "" : editedName) : ""
         let introToSave = canEditNotice ? (editedIntroduction.isEmpty ? "" : editedIntroduction) : ""
-        settingStore.updateGroupProfile(
-            name: nameToSave,
-            notice: introToSave,
-            avatar: nil,
+        var info = GroupInfo(groupID: groupID)
+        info.groupName = nameToSave
+        info.notification = introToSave
+        groupStore.updateProfile(
+            groupInfo: info,
             completion: { result in
                 switch result {
                 case .success:
@@ -1171,7 +1206,19 @@ private struct GroupManagementView: View {
     @State private var isAllMuted: Bool = false
     @State private var allMembers: [GroupMember] = []
     @State private var currentUserID: String = ""
-    let settingStore: GroupSettingStore
+    @State private var groupType: GroupType = .work
+    @State private var currentUserRole: GroupMemberRole = .member
+    let groupID: String
+    let groupStore: GroupStore
+    let memberStore: GroupMemberStore
+
+    private func canPerformAction(_ permission: GroupPermission) -> Bool {
+        return GroupPermissionManager.hasPermission(
+            groupType: groupType,
+            memberRole: currentUserRole,
+            permission: permission
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1254,19 +1301,25 @@ private struct GroupManagementView: View {
                     .foregroundColor(themeState.colors.textColorLink)
             }
         )
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.isAllMuted))) { isAllMuted in
-            self.isAllMuted = isAllMuted
+        .onReceive(groupStore.state.subscribe(StatePublisherSelector(keyPath: \GroupState.joinedGroupList))) { joinedGroupList in
+            if let info = joinedGroupList.first(where: { $0.groupID == groupID }) {
+                self.isAllMuted = info.isAllMuted ?? false
+                self.groupType = info.groupType ?? .work
+                self.currentUserRole = info.selfRole ?? .member
+            }
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
+        .onReceive(memberStore.state.subscribe(StatePublisherSelector(keyPath: \GroupMemberState.memberList))) { allMembers in
             self.allMembers = allMembers
+            self.updateMutedMembers(from: allMembers)
         }
         .onAppear {
+            currentUserID = LoginStore.shared.state.value.loginUserInfo?.userID ?? ""
             loadMutedMembers()
         }
         .background(
             NavigationLink(
                 destination: MuteMemberSelectionView(
-                    settingStore: settingStore,
+                    memberStore: memberStore,
                     onMutingCompleted: {
                         loadMutedMembers()
                     }
@@ -1280,17 +1333,14 @@ private struct GroupManagementView: View {
     }
 
     private func loadMutedMembers() {
-        settingStore.fetchGroupMemberList(role: .all) { result in
+        memberStore.loadMembers(roleList: [.all]) { result in
             switch result {
             case .success:
-                let currentTimestamp = UInt(Date().timeIntervalSince1970)
-                var filteredMembers: [GroupMember] = []
-                for member in self.allMembers {
-                    if member.muteUntil != 0, member.muteUntil > currentTimestamp {
-                        filteredMembers.append(member)
-                    }
+                // Read directly from store state instead of stale @State copy
+                let currentMembers = memberStore.state.value.memberList
+                DispatchQueue.main.async {
+                    self.mutedMembers = currentMembers.filter { $0.isMuted }
                 }
-                self.mutedMembers = filteredMembers
             case .failure:
                 break
             }
@@ -1298,11 +1348,11 @@ private struct GroupManagementView: View {
     }
 
     private func handleMuteAllToggle(_ enabled: Bool) {
-        settingStore.setMuteAllMembers(value: enabled, completion: nil)
+        groupStore.muteAllMembers(groupID: groupID, isMuted: enabled, completion: nil)
     }
 
     private func unmuteMember(_ member: GroupMember) {
-        settingStore.setGroupMemberMuteTime(
+        memberStore.muteMember(
             userID: member.userID,
             time: 0,
             completion: { result in
@@ -1317,7 +1367,19 @@ private struct GroupManagementView: View {
     }
 
     private func handleAddMutedMembers() {
+        guard canPerformAction(.muteMember) else {
+            WindowToastManager.shared.show(
+                LocalizedChatString("GroupAddMemberOfBlockedForbidden"),
+                type: .warning,
+                duration: 3
+            )
+            return
+        }
         showingMemberSelection = true
+    }
+
+    private func updateMutedMembers(from members: [GroupMember]) {
+        mutedMembers = members.filter { $0.isMuted }
     }
 }
 
@@ -1327,7 +1389,7 @@ private struct MuteMemberSelectionView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var allMembers: [GroupMember] = []
     @State private var currentUserID: String = ""
-    let settingStore: GroupSettingStore
+    let memberStore: GroupMemberStore
     let onMutingCompleted: () -> Void
 
     private var availableMembers: [GroupMember] {
@@ -1339,7 +1401,7 @@ private struct MuteMemberSelectionView: View {
     private var currentlyMutedMemberIDs: Set<String> {
         let currentTimestamp = UInt(Date().timeIntervalSince1970)
         return Set(allMembers.compactMap { member in
-            if member.muteUntil != 0, member.muteUntil > currentTimestamp {
+            if member.muteUntil != 0, member.muteUntil > Int64(currentTimestamp) {
                 return member.userID
             }
             return nil
@@ -1348,11 +1410,11 @@ private struct MuteMemberSelectionView: View {
 
     private var userList: [UserPickerItem] {
         return availableMembers.map { member in
-            let subtitle = member.role == .admin ? "管理员" : nil
+            let subtitle = member.role == .admin ? LocalizedChatString("MembersRoleAdmin") : nil
             return UserPickerItem(
                 userID: member.userID,
                 avatarURL: member.avatarURL,
-                title: member.displayName,
+                title: displayName(for: member),
                 subtitle: subtitle
             )
         }
@@ -1370,28 +1432,34 @@ private struct MuteMemberSelectionView: View {
             themeState.colors.bgColorOperate
                 .ignoresSafeArea()
         )
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
+        .onReceive(memberStore.state.subscribe(StatePublisherSelector(keyPath: \GroupMemberState.memberList))) { allMembers in
             self.allMembers = allMembers
+        }
+        .onAppear {
+            currentUserID = LoginStore.shared.state.value.loginUserInfo?.userID ?? ""
         }
     }
 
     private func muteMembers(_ selectedUsers: [UserPickerItem]) {
+        print(">>>>> muteMembers called with \(selectedUsers.count) users: \(selectedUsers.map { $0.userID })")
         var completedCount = 0
         var hasError = false
         for user in selectedUsers {
-            settingStore.setGroupMemberMuteTime(
+            memberStore.muteMember(
                 userID: user.userID,
                 time: 7*24*60*60, // 7 days by default
                 completion: { result in
                     switch result {
                     case .success:
+                        print(">>>>> muteMember succeeded for user: \(user.userID)")
                         completedCount += 1
                         if completedCount == selectedUsers.count, !hasError {
                             DispatchQueue.main.async {
                                 self.onMutingCompleted()
                             }
                         }
-                    case .failure:
+                    case .failure(let error):
+                        print(">>>>> muteMember failed for user: \(user.userID), error: \(error.code) - \(error.message)")
                         hasError = true
                         completedCount += 1
                         if completedCount == selectedUsers.count {
@@ -1417,11 +1485,11 @@ private struct MutedMemberRow: View {
         HStack(spacing: 12) {
             Avatar(
                 url: member.avatarURL,
-                name: member.displayName
+                name: displayName(for: member)
             )
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Text(member.displayName)
+                    Text(displayName(for: member))
                         .font(.body)
                         .foregroundColor(themeState.colors.textColorPrimary)
                     if member.role == .owner {
@@ -1462,7 +1530,8 @@ private struct GroupNoticeDetailView: View {
     @State private var groupType: GroupType = .work
     @State private var currentUserRole: GroupMemberRole = .member
     @FocusState private var isTextEditorFocused: Bool
-    let settingStore: GroupSettingStore
+    let groupID: String
+    let groupStore: GroupStore
 
     private var canEdit: Bool {
         GroupPermissionManager.hasPermission(
@@ -1522,10 +1591,10 @@ private struct GroupNoticeDetailView: View {
             },
             trailing: canEdit ? Button(isEditing ? LocalizedChatString("Done") : LocalizedChatString("Edit")) {
                 if isEditing {
-                    settingStore.updateGroupProfile(
-                        name: nil,
-                        notice: editedNotice,
-                        avatar: nil,
+                    var info = GroupInfo(groupID: groupID)
+                    info.notification = editedNotice
+                    groupStore.updateProfile(
+                        groupInfo: info,
                         completion: { result in
                             switch result {
                             case .success:
@@ -1544,14 +1613,12 @@ private struct GroupNoticeDetailView: View {
             }
             .foregroundColor(themeState.colors.textColorLink) : nil
         )
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.notice))) { notice in
-            self.notice = notice
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.groupType))) { groupType in
-            self.groupType = groupType
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.currentUserRole))) { currentUserRole in
-            self.currentUserRole = currentUserRole
+        .onReceive(groupStore.state.subscribe(StatePublisherSelector(keyPath: \GroupState.joinedGroupList))) { joinedGroupList in
+            if let info = joinedGroupList.first(where: { $0.groupID == groupID }) {
+                self.notice = info.notification ?? ""
+                self.groupType = info.groupType ?? .work
+                self.currentUserRole = info.selfRole ?? .member
+            }
         }
         .onAppear {
             editedNotice = notice
@@ -1565,12 +1632,12 @@ private struct AddGroupMemberView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var allMembers: [GroupMember] = []
     @State private var friendList: [ContactInfo] = []
-    let settingStore: GroupSettingStore
-    @State private var contactStore: ContactListStore
+    let memberStore: GroupMemberStore
+    private let contactStore: ContactStore
 
-    init(settingStore: GroupSettingStore) {
-        self.settingStore = settingStore
-        self._contactStore = State(initialValue: ContactListStore.create())
+    init(memberStore: GroupMemberStore) {
+        self.memberStore = memberStore
+        self.contactStore = ContactStore.shared
     }
 
     private var preSelectedUsers: Set<String> {
@@ -1580,9 +1647,9 @@ private struct AddGroupMemberView: View {
     private var userList: [UserPickerItem] {
         return friendList.map { contact in
             UserPickerItem(
-                userID: contact.contactID,
+                userID: contact.userID,
                 avatarURL: contact.avatarURL,
-                title: contact.title ?? contact.contactID
+                title: displayName(for: contact)
             )
         }
     }
@@ -1599,23 +1666,20 @@ private struct AddGroupMemberView: View {
             )
         }
         .navigationBarTitle(LocalizedChatString("GroupAddFirend"), displayMode: .inline)
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
+        .onReceive(memberStore.state.subscribe(StatePublisherSelector(keyPath: \GroupMemberState.memberList))) { allMembers in
             self.allMembers = allMembers
         }
-        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactListState.friendList))) { newFriendList in
+        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactState.friendList))) { newFriendList in
             self.friendList = newFriendList
         }
         .onAppear {
-            // Initialize with current data
             self.friendList = contactStore.state.value.friendList
-
-            // Fetch latest data
-            contactStore.fetchFriendList(completion: { result in
+            contactStore.loadFriends(completion: { result in
                 switch result {
                 case .success:
-                    print(" AddGroupMemberView: fetchFriendList success")
+                    print(" AddGroupMemberView: loadFriends success")
                 case .failure(let error):
-                    print(" AddGroupMemberView: fetchFriendList failed: \(error)")
+                    print(" AddGroupMemberView: loadFriends failed: \(error)")
                 }
             })
         }
@@ -1627,7 +1691,7 @@ private struct AddGroupMemberView: View {
 
     private func addSelectedMembers(_ selectedUsers: [UserPickerItem]) {
         let userIDs = selectedUsers.map { $0.userID }
-        settingStore.addGroupMember(
+        memberStore.addMember(
             userIDList: userIDs,
             completion: nil
         )
@@ -1644,11 +1708,12 @@ private struct GroupMemberListView: View {
     @State private var showingMemberDetail = false
     @State private var selectedMemberForDetail: GroupMember?
     @State private var allMembers: [GroupMember] = []
-    @State private var memberCount: UInt = 0
+    @State private var memberCount: Int = 0
     @State private var groupType: GroupType = .work
     @State private var currentUserRole: GroupMemberRole = .member
     @State private var currentUserID: String = ""
-    let settingStore: GroupSettingStore
+    let groupStore: GroupStore
+    let memberStore: GroupMemberStore
     let onGroupMemberClick: ((String) -> Void)?
 
     var body: some View {
@@ -1720,20 +1785,23 @@ private struct GroupMemberListView: View {
             }
         )
         .onAppear {
-            settingStore.fetchGroupMemberList(role: .all, completion: { _ in
+            currentUserID = LoginStore.shared.state.value.loginUserInfo?.userID ?? ""
+            memberStore.loadMembers(roleList: [.all], completion: { _ in
             })
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
+        .onReceive(memberStore.state.subscribe(StatePublisherSelector(keyPath: \GroupMemberState.memberList))) { allMembers in
             self.allMembers = allMembers
+            self.memberCount = allMembers.count
+            if let selfMember = allMembers.first(where: { $0.userID == currentUserID }) {
+                self.currentUserRole = selfMember.role
+            }
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.memberCount))) { memberCount in
-            self.memberCount = memberCount
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.groupType))) { groupType in
-            self.groupType = groupType
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.currentUserRole))) { currentUserRole in
-            self.currentUserRole = currentUserRole
+        .onReceive(groupStore.state.subscribe(StatePublisherSelector(keyPath: \GroupState.joinedGroupList))) { joinedGroupList in
+            if let info = joinedGroupList.first(where: { $0.groupID == memberStore.groupID }) {
+                self.memberCount = info.memberCount ?? self.memberCount
+                self.groupType = info.groupType ?? .work
+                self.currentUserRole = info.selfRole ?? self.currentUserRole
+            }
         }
     }
 
@@ -1780,14 +1848,11 @@ private struct GroupMemberListView: View {
         if member.userID == currentUserID {
             return
         }
-        if #available(iOS 26.0, *) {
-            // iOS 26+: tap goes to detail directly, long press shows context menu
-            handleMemberDetail(member)
-        } else {
-            // iOS < 26: tap shows action sheet
-            selectedMember = member
-            showingMemberActionSheet = true
-        }
+        // Tapping a member should always reveal the management action sheet so the user can
+        // choose between "Member Info", role change and removal. On iOS 26+ the context menu
+        // (long press) remains available for power users.
+        selectedMember = member
+        showingMemberActionSheet = true
     }
 
     private func canPerformAction(_ permission: GroupPermission) -> Bool {
@@ -1808,7 +1873,7 @@ private struct GroupMemberListView: View {
     }
 
     private func handleSetMemberRole(_ member: GroupMember, role: GroupMemberRole) {
-        settingStore.setGroupMemberRole(
+        memberStore.setMemberRole(
             userID: member.userID,
             role: role,
             completion: nil
@@ -1816,8 +1881,8 @@ private struct GroupMemberListView: View {
     }
 
     private func handleRemoveMember(_ member: GroupMember) {
-        settingStore.deleteGroupMember(
-            members: [member],
+        memberStore.deleteMember(
+            userIDList: [member.userID],
             completion: nil
         )
     }
@@ -1835,44 +1900,39 @@ private struct MemberActionSheetModifier: ViewModifier {
     let onRemoveMember: (GroupMember) -> Void
     
     func body(content: Content) -> some View {
-        if #available(iOS 26.0, *) {
-            // iOS 26+: no action sheet needed, using contextMenu instead
-            content
-        } else {
-            content
-                .confirmationDialog(
-                    selectedMember?.displayName ?? "",
-                    isPresented: $isPresented,
-                    titleVisibility: .visible
-                ) {
-                    if let member = selectedMember {
-                        if canPerformAction(.getGroupMemberInfo) {
-                            Button(LocalizedChatString("GroupMemberDetail")) {
-                                onMemberDetail(member)
-                            }
+        content
+            .confirmationDialog(
+                selectedMember.map { displayName(for: $0) } ?? "",
+                isPresented: $isPresented,
+                titleVisibility: .visible
+            ) {
+                if let member = selectedMember {
+                    if canPerformAction(.getGroupMemberInfo) {
+                        Button(LocalizedChatString("GroupMemberDetail")) {
+                            onMemberDetail(member)
                         }
-                        if member.role != .owner || currentUserRole == .owner {
-                            if canPerformAction(.setGroupMemberRole) {
-                                if member.role == .admin {
-                                    Button(LocalizedChatString("CancelAdmin")) {
-                                        onSetMemberRole(member, .member)
-                                    }
-                                } else if member.role == .member {
-                                    Button(LocalizedChatString("SetAsAdmin")) {
-                                        onSetMemberRole(member, .admin)
-                                    }
-                                }
-                            }
-                            if canPerformAction(.removeGroupMember) {
-                                Button(LocalizedChatString("RemoveMember"), role: .destructive) {
-                                    onRemoveMember(member)
-                                }
-                            }
-                        }
-                        Button(LocalizedChatString("Cancel"), role: .cancel) {}
                     }
+                    if member.role != .owner || currentUserRole == .owner {
+                        if canPerformAction(.setGroupMemberRole) {
+                            if member.role == .admin {
+                                Button(LocalizedChatString("CancelAdmin")) {
+                                    onSetMemberRole(member, .member)
+                                }
+                            } else if member.role == .member {
+                                Button(LocalizedChatString("SetAsAdmin")) {
+                                    onSetMemberRole(member, .admin)
+                                }
+                            }
+                        }
+                        if canPerformAction(.removeGroupMember) {
+                            Button(LocalizedChatString("RemoveMember"), role: .destructive) {
+                                onRemoveMember(member)
+                            }
+                        }
+                    }
+                    Button(LocalizedChatString("Cancel"), role: .cancel) {}
                 }
-        }
+            }
     }
 }
 
@@ -1886,11 +1946,11 @@ private struct GroupMemberListRowContent: View {
         HStack(spacing: 12) {
             Avatar(
                 url: member.avatarURL,
-                name: member.displayName
+                name: displayName(for: member)
             )
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 8) {
-                    Text(member.displayName)
+                    Text(displayName(for: member))
                         .font(.body)
                         .foregroundColor(themeState.colors.textColorPrimary)
                     if member.role == .owner {
@@ -1935,11 +1995,11 @@ private struct GroupMemberListRow: View {
             HStack(spacing: 12) {
                 Avatar(
                     url: member.avatarURL,
-                    name: member.displayName
+                    name: displayName(for: member)
                 )
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
-                        Text(member.displayName)
+                        Text(displayName(for: member))
                             .font(.body)
                             .foregroundColor(themeState.colors.textColorPrimary)
                         if member.role == .owner {
@@ -1978,7 +2038,9 @@ struct TransferOwnershipView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var allMembers: [GroupMember] = []
     @State private var currentUserID: String = ""
-    let settingStore: GroupSettingStore
+    let groupID: String
+    let groupStore: GroupStore
+    let memberStore: GroupMemberStore
 
     private var userList: [UserPickerItem] {
         return allMembers.compactMap { member in
@@ -1989,7 +2051,7 @@ struct TransferOwnershipView: View {
             return UserPickerItem(
                 userID: member.userID,
                 avatarURL: member.avatarURL,
-                title: member.displayName,
+                title: displayName(for: member),
                 subtitle: subtitle
             )
         }
@@ -2007,8 +2069,11 @@ struct TransferOwnershipView: View {
             themeState.colors.bgColorOperate
                 .ignoresSafeArea()
         )
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \GroupSettingState.allMembers))) { allMembers in
+        .onReceive(memberStore.state.subscribe(StatePublisherSelector(keyPath: \GroupMemberState.memberList))) { allMembers in
             self.allMembers = allMembers
+        }
+        .onAppear {
+            currentUserID = LoginStore.shared.state.value.loginUserInfo?.userID ?? ""
         }
     }
 
@@ -2016,9 +2081,53 @@ struct TransferOwnershipView: View {
         guard let selectedUser = selectedUsers.first else {
             return
         }
-        settingStore.changeGroupOwner(
+        groupStore.changeOwner(
+            groupID: groupID,
             newOwnerID: selectedUser.userID,
-            completion: nil
+            completion: { result in
+                switch result {
+                case .success:
+                    print(">>>>> transferOwnership succeeded to user: \(selectedUser.userID)")
+                case .failure(let error):
+                    print(">>>>> transferOwnership failed: \(error.code) - \(error.message)")
+                }
+            }
         )
+    }
+}
+
+private final class GroupInfoHandler: GetGroupInfoCompletionHandler {
+    private let onSuccessHandler: (GroupInfo) -> Void
+    private let onFailureHandler: (Int, String) -> Void
+
+    init(onSuccess: @escaping (GroupInfo) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessHandler = onSuccess
+        self.onFailureHandler = onFailure
+    }
+
+    func onSuccess(groupInfo: GroupInfo) {
+        onSuccessHandler(groupInfo)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureHandler(code, desc)
+    }
+}
+
+private final class GroupConversationInfoHandler: GetConversationInfoCompletionHandler {
+    private let onSuccessHandler: (ConversationInfo) -> Void
+    private let onFailureHandler: (Int, String) -> Void
+
+    init(onSuccess: @escaping (ConversationInfo) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessHandler = onSuccess
+        self.onFailureHandler = onFailure
+    }
+
+    func onSuccess(conversationInfo: ConversationInfo) {
+        onSuccessHandler(conversationInfo)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureHandler(code, desc)
     }
 }

@@ -52,41 +52,16 @@ public struct UserPicker: View {
 
     public var body: some View {
         VStack(spacing: 0) {
-            if !selectedUsersList.isEmpty {
-                VStack(spacing: 0) {
-                    HStack {
-                        Text(LocalizedChatString("Chosen") + "\(selectedUsersList.count) " + LocalizedChatString("People"))
-                            .font(.caption)
-                            .foregroundColor(themeState.colors.textColorSecondary)
-                        Spacer()
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                    .padding(.bottom, 8)
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 12) {
-                            ForEach(selectedUsersList, id: \.userID) { user in
-                                VStack(spacing: 4) {
-                                    Avatar(
-                                        url: user.avatarURL,
-                                        name: user.title,
-                                        size: .l
-                                    )
-                                    Text(user.title)
-                                        .font(.caption)
-                                        .foregroundColor(themeState.colors.textColorPrimary)
-                                        .lineLimit(1)
-                                        .frame(width: 50)
-                                }
-                            }
-                        }
-                        .padding(.horizontal, 16)
-                    }
-                    .padding(.bottom, 12)
-                }
-                .background(themeState.colors.bgColorOperate.opacity(0.05))
-                Divider()
-            }
+            // The "chosen users" header is always laid out (just hidden when empty) so the
+            // navigation bar / underlying list don't shift when the user toggles selection
+            // between 0 and 1 inside a presented sheet. Previously the header was
+            // conditionally added to the view tree, which collapsed the layout and could
+            // leave the navigation title visually clipped.
+            chosenUsersHeader
+                .frame(height: selectedUsersList.isEmpty ? 0 : nil)
+                .opacity(selectedUsersList.isEmpty ? 0 : 1)
+                .clipped()
+                .animation(.easeInOut(duration: 0.2), value: selectedUsersList.isEmpty)
             ScrollView {
                 VStack(spacing: 1) {
                     ForEach(userList, id: \.userID) { user in
@@ -120,7 +95,6 @@ public struct UserPicker: View {
                     }
                 }
             }
-            Spacer()
         }
         .navigationBarTitle(LocalizedChatString("ChooseUser"), displayMode: .inline)
         .navigationBarBackButtonHidden(true)
@@ -136,6 +110,43 @@ public struct UserPicker: View {
             .foregroundColor(themeState.colors.textColorLink)
             .disabled(selectedUsersList.isEmpty)
         )
+    }
+
+    @ViewBuilder
+    private var chosenUsersHeader: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(LocalizedChatString("Chosen") + "\(selectedUsersList.count) " + LocalizedChatString("People"))
+                    .font(.caption)
+                    .foregroundColor(themeState.colors.textColorSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 12) {
+                    ForEach(selectedUsersList, id: \.userID) { user in
+                        VStack(spacing: 4) {
+                            Avatar(
+                                url: user.avatarURL,
+                                name: user.title,
+                                size: .l
+                            )
+                            Text(user.title)
+                                .font(.caption)
+                                .foregroundColor(themeState.colors.textColorPrimary)
+                                .lineLimit(1)
+                                .frame(width: 50)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.bottom, 12)
+            Divider()
+        }
+        .background(themeState.colors.bgColorOperate.opacity(0.05))
     }
 
     private var selectedUsersList: [UserPickerItem] {

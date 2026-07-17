@@ -14,10 +14,14 @@ public struct C2CChatSetting: View {
     @State private var isPinned: Bool = false
     @State private var isInBlacklist: Bool = false
     @State private var userID: String = ""
-    @State private var settingStore: C2CSettingStore
+    private let contactStore: ContactStore
     @State private var conversationStore: ConversationListStore
     private let onSendMessageClick: (() -> Void)?
     private let onContactDelete: (() -> Void)?
+
+    private var conversationID: String {
+        ChatUtil.getC2CConversationID(userID)
+    }
 
     public init(
         userID: String,
@@ -25,7 +29,7 @@ public struct C2CChatSetting: View {
         onContactDelete: (() -> Void)? = nil
     ) {
         self.userID = userID
-        self.settingStore = C2CSettingStore.create(userID: userID)
+        self.contactStore = ContactStore.shared
         self.onSendMessageClick = onSendMessageClick
         self.onContactDelete = onContactDelete
         self.conversationStore = ConversationListStore.create()
@@ -35,7 +39,7 @@ public struct C2CChatSetting: View {
         let group = DispatchGroup()
         var hasError = false
         group.enter()
-        settingStore.fetchUserInfo(completion: { result in
+        contactStore.loadFriends(completion: { result in
             switch result {
             case .success:
                 group.leave()
@@ -45,17 +49,41 @@ public struct C2CChatSetting: View {
             }
         })
         group.enter()
-        conversationStore.fetchConversationInfo(ChatUtil.getC2CConversationID(userID), completion: { result in
-            switch result {
-            case .success:
-                group.leave()
-            case .failure:
-                hasError = true
-                group.leave()
-            }
-        })
+        contactStore.getContactInfo(
+            userIDList: [userID],
+            completion: ContactInfoHandler(
+                onSuccess: { contactInfoList in
+                    if let contactInfo = contactInfoList.first {
+                        DispatchQueue.main.async {
+                            self.applyContactInfo(contactInfo)
+                        }
+                    }
+                    group.leave()
+                },
+                onFailure: { _, _ in
+                    hasError = true
+                    group.leave()
+                }
+            )
+        )
         group.enter()
-        settingStore.checkBlacklistStatus(completion: { result in
+        conversationStore.getConversationInfo(
+            conversationID: conversationID,
+            completion: ConversationInfoHandler(
+                onSuccess: { conversationInfo in
+                    DispatchQueue.main.async {
+                        self.applyConversationInfo(conversationInfo)
+                    }
+                    group.leave()
+                },
+                onFailure: { _, _ in
+                    hasError = true
+                    group.leave()
+                }
+            )
+        )
+        group.enter()
+        contactStore.loadBlackList(completion: { result in
             switch result {
             case .success:
                 group.leave()
@@ -94,10 +122,10 @@ public struct C2CChatSetting: View {
         .sheet(isPresented: $showingRemarkEdit) {
             RemarkEditView(
                 currentRemark: remark,
-                settingStore: settingStore
+                contactStore: contactStore,
+                userID: userID
             ) { _ in
-                // The remark should be automatically updated by the settingStore
-                // No need to manually update here since setUserRemark will update the @Published property
+                // The remark is refreshed through ContactStore state updates.
             }
         }
         .alert(item: $alertType) { type in
@@ -128,23 +156,18 @@ public struct C2CChatSetting: View {
                 )
             }
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.remark))) { remark in
-            self.remark = remark
+        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactState.friendList))) { friendList in
+            if let contactInfo = friendList.first(where: { $0.userID == userID }) {
+                applyContactInfo(contactInfo)
+            }
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.nickname))) { nick in
-            self.nick = nick
+        .onReceive(contactStore.state.subscribe(StatePublisherSelector(keyPath: \ContactState.blackList))) { blackList in
+            self.isInBlacklist = blackList.contains(where: { $0.userID == userID })
         }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.avatarURL))) { avatar in
-            self.avatar = avatar
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.isNotDisturb))) { isNotDisturb in
-            self.isNotDisturb = isNotDisturb
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.isPinned))) { isPinned in
-            self.isPinned = isPinned
-        }
-        .onReceive(settingStore.state.subscribe(StatePublisherSelector(keyPath: \C2CSettingState.isInBlacklist))) { isInBlacklist in
-            self.isInBlacklist = isInBlacklist
+        .onReceive(conversationStore.state.subscribe(StatePublisherSelector(keyPath: \ConversationListState.conversationList))) { conversationList in
+            if let conversationInfo = conversationList.first(where: { $0.conversationID == conversationID }) {
+                applyConversationInfo(conversationInfo)
+            }
         }
         .onAppear {
             fetchInitialInfo()
@@ -206,7 +229,8 @@ public struct C2CChatSetting: View {
                         title: LocalizedChatString("ProfileMessageDoNotDisturb"),
                         isOn: $isNotDisturb,
                         onToggle: { value in
-                            conversationStore.muteConversation(ChatUtil.getC2CConversationID(userID), mute: isNotDisturb) { result in
+                            let opt: ReceiveMessageOption = value ? .notNotify : .receive
+                            conversationStore.setReceiveMessageOpt(conversationID: conversationID, opt: opt) { result in
                                 switch result {
                                 case .success:
                                     print("Successfully set message do not disturb: \(value)")
@@ -220,7 +244,7 @@ public struct C2CChatSetting: View {
                         title: LocalizedChatString("ProfileStickyonTop"),
                         isOn: $isPinned,
                         onToggle: { value in
-                            conversationStore.pinConversation(ChatUtil.getC2CConversationID(userID), pin: isPinned, completion: { result in
+                            conversationStore.pinConversation(conversationID: conversationID, pin: value, completion: { result in
                                 switch result {
                                 case .success:
                                     print("Successfully set pin chat: \(value)")
@@ -300,19 +324,39 @@ public struct C2CChatSetting: View {
     // MARK: - Private Methods
 
     private func addToBlacklist() {
-        settingStore.addToBlacklist(completion: nil)
+        contactStore.addToBlacklist(userID: userID) { result in
+            switch result {
+            case .success:
+                contactStore.loadBlackList(completion: nil)
+            case .failure(let error):
+                print("Failed to add user to blacklist: \(error.code) - \(error.message)")
+                DispatchQueue.main.async {
+                    self.isInBlacklist = false
+                }
+            }
+        }
     }
 
     private func removeFromBlacklist() {
-        settingStore.removeFromBlacklist(completion: nil)
+        contactStore.removeFromBlacklist(userID: userID) { result in
+            switch result {
+            case .success:
+                contactStore.loadBlackList(completion: nil)
+            case .failure(let error):
+                print("Failed to remove user from blacklist: \(error.code) - \(error.message)")
+                DispatchQueue.main.async {
+                    self.isInBlacklist = true
+                }
+            }
+        }
     }
 
     private func deleteFriend() {
-        settingStore.deleteFriend(completion: { result in
+        contactStore.deleteFriend(userID: userID, completion: { result in
             switch result {
             case .success:
                 print("Successfully deleted friend")
-                conversationStore.deleteConversation(ChatUtil.getC2CConversationID(userID), completion: nil)
+                conversationStore.deleteConversation(conversationID: conversationID, completion: nil)
             case .failure(let error):
                 print("Failed to delete friend: \(error.code) - \(error.message)")
             }
@@ -324,7 +368,7 @@ public struct C2CChatSetting: View {
     }
 
     private func clearHistory() {
-        conversationStore.clearConversationMessages(ChatUtil.getC2CConversationID(userID), completion: { result in
+        conversationStore.clearConversationMessages(conversationID: conversationID, completion: { result in
             switch result {
             case .success:
                 print("Successfully cleared chat history")
@@ -336,6 +380,23 @@ public struct C2CChatSetting: View {
             }
         })
     }
+
+    private func applyContactInfo(_ contactInfo: ContactInfo) {
+        if let friendRemark = contactInfo.friendRemark {
+            remark = friendRemark
+        }
+        if let nickname = contactInfo.nickname {
+            nick = nickname
+        }
+        if let avatarURL = contactInfo.avatarURL {
+            avatar = avatarURL
+        }
+    }
+
+    private func applyConversationInfo(_ conversationInfo: ConversationInfo) {
+        isNotDisturb = conversationInfo.receiveOption != .receive
+        isPinned = conversationInfo.isPinned
+    }
 }
 
 // MARK: - Remark Edit View
@@ -345,12 +406,14 @@ private struct RemarkEditView: View {
     @EnvironmentObject var themeState: ThemeState
     @State private var remarkText: String
     @State private var isLoading = false
-    let settingStore: C2CSettingStore
+    let contactStore: ContactStore
+    let userID: String
     let onSave: (String) -> Void
 
-    init(currentRemark: String, settingStore: C2CSettingStore, onSave: @escaping (String) -> Void) {
+    init(currentRemark: String, contactStore: ContactStore, userID: String, onSave: @escaping (String) -> Void) {
         self._remarkText = State(initialValue: currentRemark)
-        self.settingStore = settingStore
+        self.contactStore = contactStore
+        self.userID = userID
         self.onSave = onSave
     }
 
@@ -384,7 +447,8 @@ private struct RemarkEditView: View {
 
     private func saveRemark() {
         isLoading = true
-        settingStore.setUserRemark(
+        contactStore.setFriendRemark(
+            userID: userID,
             remark: remarkText,
             completion: { result in
                 switch result {
@@ -402,5 +466,41 @@ private struct RemarkEditView: View {
                 }
             }
         )
+    }
+}
+
+private final class ContactInfoHandler: GetContactInfoCompletionHandler {
+    private let onSuccessHandler: ([ContactInfo]) -> Void
+    private let onFailureHandler: (Int, String) -> Void
+
+    init(onSuccess: @escaping ([ContactInfo]) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessHandler = onSuccess
+        self.onFailureHandler = onFailure
+    }
+
+    func onSuccess(contactInfoList: [ContactInfo]) {
+        onSuccessHandler(contactInfoList)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureHandler(code, desc)
+    }
+}
+
+private final class ConversationInfoHandler: GetConversationInfoCompletionHandler {
+    private let onSuccessHandler: (ConversationInfo) -> Void
+    private let onFailureHandler: (Int, String) -> Void
+
+    init(onSuccess: @escaping (ConversationInfo) -> Void, onFailure: @escaping (Int, String) -> Void) {
+        self.onSuccessHandler = onSuccess
+        self.onFailureHandler = onFailure
+    }
+
+    func onSuccess(conversationInfo: ConversationInfo) {
+        onSuccessHandler(conversationInfo)
+    }
+
+    func onFailure(code: Int, desc: String) {
+        onFailureHandler(code, desc)
     }
 }

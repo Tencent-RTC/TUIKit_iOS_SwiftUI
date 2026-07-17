@@ -125,7 +125,7 @@ internal class AudioRecorderImpl: AudioRecorder {
     }
     
     private func createRecordedFilePath()->String {
-        let path = ChatUtil.generateMediaPath(messageType: .sound, withExtension: "m4a")
+        let path = ChatUtil.generateMediaPath(messageType: .audio, withExtension: "m4a")
         let directory = (path as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: nil)
         return path
