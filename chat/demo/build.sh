@@ -1,0 +1,352 @@
+#!/usr/bin/env bash
+
+export LANG="zh_CN.UTF-8"
+export LC_ALL="zh_CN.UTF-8"
+
+# 蓝盾默认变量
+MajorVersion=${MajorVersion-0}
+MinorVersion=${MinorVersion-0}
+FixVersion=${FixVersion-0}
+BuildNo=${BuildNo-0}
+
+# 蓝盾自定义变量：是否构建 App Store 上架包（参考 imsdk/rdm/ios/build_with_gn.sh 的 AppStore 分支）
+BUILD_APP_STORE=${BUILD_APP_STORE-false}
+
+######################## 1、变量赋值 ########################
+export SDK_VERSION=${MajorVersion}.${MinorVersion}.${BuildNo}
+echo "-------------------- Build Info --------------------"
+echo "SDK Version=${SDK_VERSION}"
+
+SHELL_DIR=$(
+    cd $(dirname $0)
+    pwd
+)
+BUILD_DIR=${SHELL_DIR}/build
+
+export OUTPUT_DIR=${SHELL_DIR}/../../../../../bin
+export SYMBOLS_DIR=${OUTPUT_DIR}/symbols_ios_${SDK_VERSION}
+DEMO_BUILD_DIR=${BUILD_DIR}/Build/Products
+
+WORKSPACE_NAME="ChatDemo"
+SCHEME_NAME="ChatDemo"
+APP_NAME="ChatDemo"
+CHATDEMO_PLIST_PATH=${SHELL_DIR}/ChatDemo/Configuration/Info.plist
+
+# App 上架标准版本（CFBundleShortVersionString）与构建号（CFBundleVersion）
+# 版本号最后一段与 BuildNo 保持一致（如 9.1.6989）
+APP_VERSION=${MajorVersion}.${MinorVersion}.${BuildNo}
+APP_BUILD_NO=${BuildNo}
+
+# 上架包应用身份信息：本工程是旧 TUIKitDemo_Swift 上架产物（腾讯云IM）的后续版本，需保持一致
+APPSTORE_APP_NAME="TIMChat_AppStore"
+APPSTORE_BUNDLE_NAME="TIMChat"
+APPSTORE_BUNDLE_ID="com.imchat.imchat"
+APPSTORE_DISPLAY_NAME="云通信IM"
+APPSTORE_TEAM_ID="FN2V63AD2J"
+APPSTORE_PROFILE="com.imchat.imchat_Production_SignProvision"
+PBXPROJ_PATH=${SHELL_DIR}/ChatDemo.xcodeproj/project.pbxproj
+
+# 获取编译工具 xcodebuild
+BUILD_BIN=$XCODE_PATH$compileEnv
+if [[ "${BUILD_BIN}" = "" ]]; then
+    BUILD_BIN=xcodebuild
+fi
+
+# 获取 xcode 编译版本
+BUILD_SDK_VERSION=$(${BUILD_BIN} -showsdks | grep iphoneos | sort -r | head -n 1 | grep -o '[0-9]*\.[0-9]*$')
+if [[ ${BUILD_SDK_VERSION} = "" ]]; then
+    echo "Error: No iPhone SDK ..."
+    exit 1
+fi
+
+BUILD_SDK_IPHONEOS="iphoneos${BUILD_SDK_VERSION}"
+echo "Build System -> ${BUILD_SDK_IPHONEOS}"
+
+######################## 2、函数定义 ########################
+
+# 前置检查：TUIChatKit_Swift/TUICallKit_Swift 必须为本仓库源码（Podfile 以 :path 引用）；
+# AtomicXCore 统一使用远端已发布版本，无需检出 tuikit_engine。
+function checkLocalDependencies() {
+    if [[ ! -f "${SHELL_DIR}/../uikit/TUIChatKit_Swift.podspec" ]]; then
+        echo "Error: ios_swiftui/chat/uikit/TUIChatKit_Swift.podspec not found."
+        exit 1
+    fi
+    if [[ ! -f "${SHELL_DIR}/../../../ios/call/TUICallKit_Swift.podspec" ]]; then
+        echo "Error: ios/call/TUICallKit_Swift.podspec not found."
+        exit 1
+    fi
+    echo "Found TUIChatKit_Swift and TUICallKit_Swift source dependencies (in-repo)"
+}
+
+# Podfile 中 AtomicXCore 本地路径（tuikit_engine）改为远端已发布版本，与命令式 CI 保持一致
+function usePublishedAtomicXCore() {
+    cp ${SHELL_DIR}/Podfile ${SHELL_DIR}/Podfile.backup
+    sed -i "" "s|pod 'AtomicXCore', :path => '../../../../../tuikit_engine/atomicx/swift/AtomicXCore'|pod 'AtomicXCore'|g" ${SHELL_DIR}/Podfile
+    echo "Podfile: AtomicXCore switched to published version"
+}
+
+function restorePodfile() {
+    if [ -f "${SHELL_DIR}/Podfile.backup" ]; then
+        echo "Restoring original Podfile..."
+        mv ${SHELL_DIR}/Podfile.backup ${SHELL_DIR}/Podfile
+    fi
+}
+
+# 清理并重新安装 CocoaPods
+function cleanAndInstallPods() {
+    echo "Cleaning and reinstalling CocoaPods..."
+    cd ${SHELL_DIR}
+
+    rm -rf Pods/
+    rm -rf ${WORKSPACE_NAME}.xcworkspace
+    rm -f Podfile.lock
+
+    echo "Cleaning CocoaPods cache..."
+    pod cache clean --all > /dev/null 2>&1 || true
+
+    echo "Installing pods with verbose output..."
+    pod install --repo-update --verbose
+
+    if [[ $? -ne 0 ]]; then
+        echo "pod install failed !!! "
+        echo "Attempting pod install without repo update..."
+        pod install --verbose
+        if [[ $? -ne 0 ]]; then
+            echo "pod install still failed, exiting..."
+            exit 1
+        fi
+    fi
+
+    echo "pod install success !!!"
+}
+
+function buildChatDemo() {
+    echo ">>>>>>>>> build ${SCHEME_NAME} begin !!! "
+
+    # 清理并重新安装 pods
+    cleanAndInstallPods
+
+    # 清理构建目录，避免多次构建 demo，脏数据影响签名
+    rm -rf ${DEMO_BUILD_DIR}/*
+
+    # 签名兜底：构建机未安装 Wildcard_202608 描述文件时关闭签名，
+    # 保证编译与 ipa 打包不被签名阻断（该产物不可装机，仅供 CI 编译验证）；
+    # 构建机已安装描述文件时正常走 Manual 签名（与旧 demo CI 行为一致）。
+    SIGNING_OVERRIDES=""
+    PROFILE_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
+    if ! grep -rqsa "Wildcard_202608" "${PROFILE_DIR}" 2>/dev/null; then
+        echo "Warning: Provisioning profile 'Wildcard_202608' not found, building with CODE_SIGNING_ALLOWED=NO"
+        SIGNING_OVERRIDES="CODE_SIGNING_ALLOWED=NO"
+    fi
+
+    ${BUILD_BIN} -workspace ${WORKSPACE_NAME}.xcworkspace -scheme ${SCHEME_NAME} -configuration Release -sdk ${BUILD_SDK_IPHONEOS} -derivedDataPath ${BUILD_DIR} ${SIGNING_OVERRIDES}
+
+    if [[ $? -ne 0 ]]; then
+        echo "build iphoneos ${SCHEME_NAME} failed !!! "
+        exit 1
+    else
+        echo "build iphoneos ${SCHEME_NAME} success !!!"
+    fi
+
+    # 压缩 Payload 生成 ipa
+    echo "zip ${APP_NAME}.ipa"
+    mkdir ${DEMO_BUILD_DIR}/Release-iphoneos/Payload
+    cp -R ${DEMO_BUILD_DIR}/Release-iphoneos/${APP_NAME}.app ${DEMO_BUILD_DIR}/Release-iphoneos/Payload
+    cd ${DEMO_BUILD_DIR}/Release-iphoneos
+    zip -r -q ${OUTPUT_DIR}/${APP_NAME}_${SDK_VERSION}.ipa Payload
+    rm -rf ${DEMO_BUILD_DIR}/Release-iphoneos/Payload
+
+    # 复制当前版本的符号表
+    echo "copy ${APP_NAME} dSYM"
+    cp -rf ${DEMO_BUILD_DIR}/Release-iphoneos/${APP_NAME}.app.dSYM ${SYMBOLS_DIR}/
+}
+
+# 本工程 Release 配置的 bundle id 已是上架身份（com.imchat.imchat），
+# 上架构建只需把 entitlements 换成 AppStore 版、把 sdk=iphoneos* 的 Wildcard
+# 描述文件覆盖替换为 Production 描述文件，编译完成后恢复。
+function patchPbxprojForAppStore() {
+    cp "${PBXPROJ_PATH}" "${PBXPROJ_PATH}.appstore.backup"
+    awk -v appProfile="${APPSTORE_PROFILE}" '
+    {
+        if (index($0, "CODE_SIGN_ENTITLEMENTS = \"ChatDemo/Configuration/ChatDemo-Release.entitlements\";") > 0) {
+            sub("ChatDemo/Configuration/ChatDemo-Release.entitlements", "ChatDemo/Configuration/ChatDemo-AppStore.entitlements")
+        } else if (index($0, "PRODUCT_BUNDLE_IDENTIFIER = com.imchat.imchat;") > 0) {
+            pending = "app"
+        } else if (pending == "app" && index($0, "PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*]") > 0) {
+            sub(/= [^;]+;/, "= " appProfile ";")
+            pending = ""
+        }
+        print
+    }' "${PBXPROJ_PATH}" > "${PBXPROJ_PATH}.tmp" && mv "${PBXPROJ_PATH}.tmp" "${PBXPROJ_PATH}"
+}
+
+function restorePbxproj() {
+    if [ -f "${PBXPROJ_PATH}.appstore.backup" ]; then
+        mv "${PBXPROJ_PATH}.appstore.backup" "${PBXPROJ_PATH}"
+    fi
+}
+
+# 编译 App Store 上架包（参考 imsdk/rdm/ios/build_with_gn.sh 的 AppStore 分支，
+# 应用身份信息与旧 TUIKitDemo_Swift 上架产物「腾讯云IM」保持一致）
+function buildAppStoreIpa() {
+    echo ">>>>>>>>> build ${APPSTORE_APP_NAME} (App Store) begin !!! "
+
+    # 清理并重新安装 pods
+    cleanAndInstallPods
+
+    # 清理构建目录，避免多次构建 demo，脏数据影响签名
+    rm -rf ${DEMO_BUILD_DIR}/*
+
+    # 上架包必须使用 Production 描述文件签名，缺失则直接失败（不可降级为不签名）
+    PROFILE_DIR="${HOME}/Library/MobileDevice/Provisioning Profiles"
+    if ! grep -rqsa "${APPSTORE_PROFILE}" "${PROFILE_DIR}" 2>/dev/null; then
+        echo "Error: Provisioning profile '${APPSTORE_PROFILE}' not found, cannot build App Store ipa."
+        exit 1
+    fi
+
+    patchPbxprojForAppStore
+
+    ${BUILD_BIN} -workspace ${WORKSPACE_NAME}.xcworkspace -scheme ${SCHEME_NAME} -configuration Release -sdk ${BUILD_SDK_IPHONEOS} -derivedDataPath ${BUILD_DIR} \
+        CODE_SIGN_STYLE=Manual \
+        CODE_SIGN_IDENTITY="iPhone Distribution" \
+        DEVELOPMENT_TEAM="${APPSTORE_TEAM_ID}"
+    BUILD_RESULT=$?
+
+    restorePbxproj
+
+    if [[ ${BUILD_RESULT} -ne 0 ]]; then
+        echo "build iphoneos ${APPSTORE_APP_NAME} failed !!! "
+        exit 1
+    else
+        echo "build iphoneos ${APPSTORE_APP_NAME} success !!!"
+    fi
+
+    # 产物重命名为上架 App 名（与旧上架产物一致）
+    mv ${DEMO_BUILD_DIR}/Release-iphoneos/${APP_NAME}.app ${DEMO_BUILD_DIR}/Release-iphoneos/${APPSTORE_APP_NAME}.app
+    mv ${DEMO_BUILD_DIR}/Release-iphoneos/${APP_NAME}.app.dSYM ${DEMO_BUILD_DIR}/Release-iphoneos/${APPSTORE_APP_NAME}.app.dSYM
+
+    # 压缩 Payload 生成 ipa
+    echo "zip ${APPSTORE_APP_NAME}.ipa"
+    mkdir ${DEMO_BUILD_DIR}/Release-iphoneos/Payload
+    cp -R ${DEMO_BUILD_DIR}/Release-iphoneos/${APPSTORE_APP_NAME}.app ${DEMO_BUILD_DIR}/Release-iphoneos/Payload
+    cd ${DEMO_BUILD_DIR}/Release-iphoneos
+
+    # App Store 上架包必须包含 SwiftSupport 文件夹，否则 App Store 校验会报 ITMS-90426。
+    # xcodebuild build + 手工 zip 不会生成该文件夹，这里从 Xcode 工具链按 app 实际嵌入的 libswift*.dylib 补齐。
+    rm -rf SwiftSupport
+    mkdir -p SwiftSupport/iphoneos
+    APP_FRAMEWORKS_DIR="Payload/${APPSTORE_APP_NAME}.app/Frameworks"
+    TOOLCHAIN_LIB_DIR="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+    if [ -d "${APP_FRAMEWORKS_DIR}" ]; then
+        for swiftlib in $(ls "${APP_FRAMEWORKS_DIR}" 2>/dev/null | grep -E '^libswift.*\.dylib$'); do
+            srclib=$(find "${TOOLCHAIN_LIB_DIR}" -path "*/iphoneos/${swiftlib}" 2>/dev/null | grep -vi simulator | head -n 1)
+            if [ -n "${srclib}" ]; then
+                cp "${srclib}" "SwiftSupport/iphoneos/${swiftlib}"
+                echo "SwiftSupport: add ${swiftlib} (from ${srclib})"
+            else
+                echo "Warning: SwiftSupport source not found for ${swiftlib}, ITMS-90426 may recur !!!"
+            fi
+        done
+    fi
+
+    ITUNES_ARTWORK_ARG=""
+    if [ -f iTunesArtwork ]; then
+        ITUNES_ARTWORK_ARG="iTunesArtwork"
+    fi
+    # SwiftSupport 仅在非空时打入包内：空目录会被 Apple 判 ITMS-90424；
+    # 部署目标 >= iOS 15 后 app 不再嵌入 Swift 运行时库，此时本就不需要 SwiftSupport。
+    SWIFTSUPPORT_ARG=""
+    if [ -n "$(ls -A SwiftSupport/iphoneos 2>/dev/null)" ]; then
+        SWIFTSUPPORT_ARG="SwiftSupport"
+    else
+        echo "SwiftSupport: no embedded swift dylibs, skip empty folder (avoid ITMS-90424)"
+    fi
+    zip -r -q ${OUTPUT_DIR}/${APPSTORE_APP_NAME}_${SDK_VERSION}.ipa Payload ${ITUNES_ARTWORK_ARG} ${SWIFTSUPPORT_ARG}
+    rm -rf Payload
+    rm -rf SwiftSupport
+
+    # 复制当前版本的符号表
+    echo "copy ${APPSTORE_APP_NAME} dSYM"
+    cp -rf ${DEMO_BUILD_DIR}/Release-iphoneos/${APPSTORE_APP_NAME}.app.dSYM ${SYMBOLS_DIR}/
+}
+
+# 压缩符号表
+function zipSymbols() {
+    echo ">>>>>>>>> zipSymbols begin !!!"
+    FINAL_SYMBOLS_DIR=temp_symbols_ios_${1}_${SDK_VERSION}
+    cd ${OUTPUT_DIR}
+    mv symbols_ios_${SDK_VERSION} ${FINAL_SYMBOLS_DIR}
+    zip -r ${FINAL_SYMBOLS_DIR}.zip ${FINAL_SYMBOLS_DIR}
+    rm -rf ${FINAL_SYMBOLS_DIR}
+    if [[ $? -ne 0 ]]; then
+        echo "zip Symbols failed !!! "
+        exit 1
+    else
+        echo "zip Symbols success !!!"
+    fi
+}
+
+######################## 3、构建主流程 ########################
+
+trap 'restorePbxproj; restorePodfile' EXIT
+checkLocalDependencies
+
+# AtomicXCore 切换（与命令式语义对齐）：
+# tuikit_engine 已检出（Podfile 相对路径指向它）时使用本地源码，跳过切换；
+# 未检出时才回退为远端已发布版本。
+if [ -f "${SHELL_DIR}/../../../../../tuikit_engine/atomicx/swift/AtomicXCore/AtomicXCore.podspec" ]; then
+    echo "tuikit_engine detected, use local AtomicXCore source"
+else
+    usePublishedAtomicXCore
+fi
+
+rm -rf ${OUTPUT_DIR}
+mkdir -p ${OUTPUT_DIR}
+mkdir -p ${SYMBOLS_DIR}
+
+if [[ "${BUILD_APP_STORE}" == "true" ]]; then
+    # App Store 上架包：上架标准版本号与显示名（与旧上架产物一致）
+    echo "-------------------- build ${APPSTORE_APP_NAME} (App Store) start --------------------"
+    if [ -f "${CHATDEMO_PLIST_PATH}" ]; then
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${APP_BUILD_NO}" "${CHATDEMO_PLIST_PATH}"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${APP_VERSION}" "${CHATDEMO_PLIST_PATH}"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ${APPSTORE_DISPLAY_NAME}" "${CHATDEMO_PLIST_PATH}"
+        # 上架包 title（App Store Connect/上传后台展示名），仅上架包生效，下方构建 ChatDemo 前会恢复
+        /usr/libexec/PlistBuddy -c "Set :CFBundleName ${APPSTORE_BUNDLE_NAME}" "${CHATDEMO_PLIST_PATH}"
+    fi
+    buildAppStoreIpa
+    zipSymbols "AppStore"
+    echo "-------------------- build ${APPSTORE_APP_NAME} (App Store) end --------------------"
+
+    echo "-------------------- build ${SCHEME_NAME} start --------------------"
+    mkdir -p ${SYMBOLS_DIR}
+    if [ -f "${CHATDEMO_PLIST_PATH}" ]; then
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${SDK_VERSION}" "${CHATDEMO_PLIST_PATH}"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${SDK_VERSION}" "${CHATDEMO_PLIST_PATH}"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName ChatDemo" "${CHATDEMO_PLIST_PATH}"
+        # 恢复 CFBundleName，避免上架分支的改名影响开发包
+        /usr/libexec/PlistBuddy -c 'Set :CFBundleName $(PRODUCT_NAME)' "${CHATDEMO_PLIST_PATH}"
+    fi
+    buildChatDemo
+    zipSymbols "${SCHEME_NAME}"
+    echo "-------------------- build ${SCHEME_NAME} end --------------------"
+else
+    # ChatDemo
+    echo "-------------------- build ${SCHEME_NAME} start --------------------"
+    if [ -f "${CHATDEMO_PLIST_PATH}" ]; then
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${SDK_VERSION}" "${CHATDEMO_PLIST_PATH}"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${SDK_VERSION}" "${CHATDEMO_PLIST_PATH}"
+    fi
+    buildChatDemo
+    zipSymbols "${SCHEME_NAME}"
+    echo "-------------------- build ${SCHEME_NAME} end --------------------"
+fi
+
+echo "-------------------- Build completed --------------------"
+echo "Generated files:"
+if [[ "${BUILD_APP_STORE}" == "true" ]]; then
+    echo "- Application IPA: ${OUTPUT_DIR}/${APPSTORE_APP_NAME}_${SDK_VERSION}.ipa"
+    echo "- Application IPA: ${OUTPUT_DIR}/${APP_NAME}_${SDK_VERSION}.ipa"
+else
+    echo "- Application IPA: ${OUTPUT_DIR}/${APP_NAME}_${SDK_VERSION}.ipa"
+fi
