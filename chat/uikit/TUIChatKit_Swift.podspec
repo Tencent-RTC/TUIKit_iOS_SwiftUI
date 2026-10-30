@@ -9,6 +9,7 @@ Pod::Spec.new do |s|
     s.source           = { :git => 'https://github.com/your-repo/atomic-x-chat.git', :tag => s.version.to_s }
     s.ios.deployment_target = '14.0'
     s.swift_version    = '5.0'
+    s.static_framework = true
 
     s.dependency 'Kingfisher'
     s.dependency 'AtomicXCore', '>= 3.0.0', '< 5.0'
