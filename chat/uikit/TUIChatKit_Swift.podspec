@@ -7,7 +7,7 @@ Pod::Spec.new do |s|
     s.license          = { :type => 'MIT', :file => 'LICENSE' }
     s.author           = { 'Tencent Cloud' => 'im@tencent.com' }
     s.source           = { :git => 'https://github.com/your-repo/atomic-x-chat.git', :tag => s.version.to_s }
-    s.ios.deployment_target = '14.0'
+    s.ios.deployment_target = '15.0'
     s.swift_version    = '5.0'
     s.static_framework = true
 
