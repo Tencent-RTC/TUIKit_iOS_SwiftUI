@@ -1,15 +1,16 @@
+import AtomicXCore
 import SwiftUI
 
 public struct ContactsPage: View {
     private let implementation: ContactsPageImpl
 
     public init(
-        config: ChatContactListConfig? = nil,
-        onContactClick: ((AZOrderedListItem) -> Void)? = nil,
-        onGroupClick: ((AZOrderedListItem) -> Void)? = nil
+        config: ContactListConfig? = nil,
+        onContactClick: ((ContactInfo) -> Void)? = nil,
+        onGroupClick: ((GroupInfo) -> Void)? = nil
     ) {
         implementation = ContactsPageImpl(
-            config: config ?? ChatContactListConfig(),
+            config: config ?? ContactListConfig(),
             onContactClick: onContactClick,
             onGroupClick: onGroupClick
         )

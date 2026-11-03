@@ -2,10 +2,10 @@ import AtomicXCore
 import TUIChatKit_Swift
 import RTCRoomEngine
 import SwiftUI
-import UIKit
-import ObjectiveC
 import TUICallKit_Swift
+import UIKit
 
+// 替换为自己的测试账号；正式环境的 UserSig 应由业务服务端签发。
 enum MiniTestAccount {
     static let userID = "test1"
     static let c2cChatUserID = "test2"
@@ -19,7 +19,7 @@ enum MiniTestAccount {
 @main
 struct ChatDemoMiniApp: App {
     init() {
-        CustomLinkMessageManager.register()
+        CustomLinkMessageManager.register()             // 注册示例自定义消息的摘要和气泡视图。
     }
 
     var body: some Scene {
@@ -42,21 +42,9 @@ struct ContentView: View {
         .navigationViewStyle(StackNavigationViewStyle())
         .environmentObject(themeState)
         .environmentObject(languageState)
-        .preferredColorScheme(preferredColorScheme)
+        .preferredColorScheme(themeState.isDarkMode ? .dark : .light)
         .onAppear {
             login()
-            InteractivePopGestureEnabler.shared.scheduleInstall()
-        }
-    }
-
-    private var preferredColorScheme: ColorScheme? {
-        switch themeState.currentMode {
-        case .light:
-            return .light
-        case .dark:
-            return .dark
-        case .system:
-            return themeState.isDarkMode ? .dark : .light
         }
     }
 
@@ -67,7 +55,7 @@ struct ContentView: View {
             DispatchQueue.main.async {
                 switch result {
                 case .success:
-                    MiniCallService.initEngine()
+                    MiniCallService.initializeCall()     // 初始化通话能力。
                 case .failure(let error):
                     print("login failed: \(error.code) \(error.message)")
                 }
@@ -77,7 +65,7 @@ struct ContentView: View {
 }
 
 enum MiniCallService {
-    static func initEngine() {
+    static func initializeCall() {
         TUICallEngine.createInstance().`init`(GenerateTestUserSig.sdkAppID, userId: MiniTestAccount.userID, userSig: MiniTestAccount.userSig) {
             TUICallEngine.createInstance().enableMultiDeviceAbility(enable: true) {
             } fail: { code, message in
@@ -93,385 +81,225 @@ enum MiniCallService {
 struct HomePage: View {
     @EnvironmentObject var themeState: ThemeState
 
-    @State private var showConversationList = false
-    @State private var showContacts = false
-    @State private var showChat = false
-    @State private var currentConversation: ConversationInfo?
-
     var body: some View {
         ZStack {
             themeState.colors.bgColorOperate.ignoresSafeArea()
             VStack(spacing: CGFloat(SpacingScheme.bubbleSpacing)) {
-                entryButton(title: NSLocalizedString("ShowConversationList", comment: "")) {
-                    showConversationList = true
+                NavigationLink(destination: ConversationsDestination()) {
+                    entryLabel(title: NSLocalizedString("ShowConversationList", comment: ""))
                 }
-                entryButton(title: NSLocalizedString("ShowC2CChat", comment: "")) {
-                    var conversation = ConversationInfo(conversationID: ChatUtil.getC2CConversationID(MiniTestAccount.c2cChatUserID))
-                    conversation.type = .c2c
-                    conversation.title = "与 \(MiniTestAccount.c2cChatUserID) 聊天"
-                    showDirectChat(conversation)
+
+                NavigationLink(destination: ChatPageDestination(conversation: makeTestC2CConversationInfo(), locateMessage: nil)) {
+                    entryLabel(title: NSLocalizedString("ShowC2CChat", comment: ""))
                 }
-                entryButton(title: NSLocalizedString("ShowGroupChat", comment: "")) {
-                    var conversation = ConversationInfo(conversationID: ChatUtil.getGroupConversationID(MiniTestAccount.chatGroupID))
-                    conversation.type = .group
-                    conversation.title = "测试群：\(MiniTestAccount.chatGroupID)"
-                    showDirectChat(conversation)
+
+                NavigationLink(destination: ChatPageDestination(conversation: makeTestGroupConversationInfo(), locateMessage: nil)) {
+                    entryLabel(title: NSLocalizedString("ShowGroupChat", comment: ""))
                 }
-                entryButton(title: NSLocalizedString("ShowContacts", comment: "")) {
-                    showContacts = true
+
+                NavigationLink(destination: ContactsDestination()) {
+                    entryLabel(title: NSLocalizedString("ShowContacts", comment: ""))
                 }
-                entryButton(title: NSLocalizedString("StartVideoCall", comment: "")) {
-                    TUICallKit.createInstance().calls(userIdList: [MiniTestAccount.c2cChatUserID], mediaType: .video, params: nil, completion: nil)
+
+                Button {
+                    startVideoCall()
+                } label: {
+                    entryLabel(title: NSLocalizedString("StartVideoCall", comment: ""))
                 }
             }
             .padding(.horizontal, CGFloat(SpacingScheme.cardSpacing))
-
-            NavigationLink(destination: ConversationsDestination().navigationBarHidden(true), isActive: $showConversationList) {
-                EmptyView()
-            }
-            .hidden()
-            NavigationLink(destination: ContactsDestination().navigationBarHidden(true), isActive: $showContacts) {
-                EmptyView()
-            }
-            .hidden()
-            if let conversation = currentConversation {
-                NavigationLink(destination: MiniChatPage(conversation: conversation, onBack: { showChat = false }).navigationBarHidden(true), isActive: $showChat) {
-                    EmptyView()
-                }
-                .hidden()
-            }
         }
     }
 
-    private func showDirectChat(_ conversation: ConversationInfo) {
-        currentConversation = conversation
-        showChat = true
+    private func makeTestC2CConversationInfo() -> ConversationInfo {
+        var conversation = ConversationInfo(
+            conversationID: ChatUtil.getC2CConversationID(MiniTestAccount.c2cChatUserID)
+        )
+        conversation.type = .c2c
+        conversation.title = "与 \(MiniTestAccount.c2cChatUserID) 聊天"
+        return conversation
     }
 
-    private func entryButton(title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(FontScheme.caption1Regular)
-                .foregroundColor(themeState.colors.textColorButton)
-                .frame(maxWidth: .infinity, minHeight: 44)
-                .background(themeState.colors.buttonColorPrimaryDefault)
-                .cornerRadius(CGFloat(RadiusScheme.smallRadius))
-        }
+    private func makeTestGroupConversationInfo() -> ConversationInfo {
+        var conversation = ConversationInfo(
+            conversationID: ChatUtil.getGroupConversationID(MiniTestAccount.chatGroupID)
+        )
+        conversation.type = .group
+        conversation.title = "测试群：\(MiniTestAccount.chatGroupID)"
+        return conversation
+    }
+
+    private func startVideoCall() {
+        TUICallKit.createInstance().calls(
+            userIdList: [MiniTestAccount.c2cChatUserID],
+            mediaType: .video,
+            params: nil,
+            completion: nil
+        )
+    }
+
+    private func entryLabel(title: String) -> some View {
+        Text(title)
+            .font(FontScheme.caption1Regular)
+            .foregroundColor(themeState.colors.textColorButton)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .background(themeState.colors.buttonColorPrimaryDefault)
+            .cornerRadius(CGFloat(RadiusScheme.smallRadius))
     }
 }
 
 private struct ConversationsDestination: View {
-    @EnvironmentObject private var themeState: ThemeState
-    @EnvironmentObject private var languageState: LanguageState
-    @Environment(\.layoutDirection) private var layoutDirection
-    @State private var hostViewController: UIViewController?
+    @State private var navigationInfo: NavigationInfo?
+    @State private var showChat = false
 
     var body: some View {
-        ConversationsPage(onConversationClick: openChat)
-            .background(MiniViewControllerBeacon { hostViewController = $0 })
+        ConversationsPage(
+            config: nil,                      // 会话操作配置，nil 使用默认配置
+            onConversationClick: { info in    // 会话打开回调，返回会话及可选的定位消息
+                navigationInfo = info
+                showChat = true
+            }
+        )
+        .navigationBarHidden(true)
+        .background(SwipeBackSupport())
+        .background(chatNavigationLink)
     }
 
-    private func openChat(_ info: NavigationInfo) {
-        guard let navigationController = hostViewController?.navigationController,
-              let sourceController = navigationController.topViewController,
-              !(sourceController is MiniContactChatHostingController),
-              navigationController.transitionCoordinator == nil else { return }
-        let returnToSource = { [weak navigationController, weak sourceController] in
-            guard let navigationController = navigationController,
-                  let sourceController = sourceController,
-                  navigationController.viewControllers.contains(where: { $0 === sourceController }) else { return }
-            navigationController.popToViewController(sourceController, animated: true)
+    @ViewBuilder
+    private var chatNavigationLink: some View {
+        if let info = navigationInfo {
+            NavigationLink(
+                destination: ChatPageDestination(
+                    conversation: info.conversation,
+                    locateMessage: info.locateMessage              // 保留搜索等入口传入的消息定位信息。
+                ),
+                isActive: $showChat
+            ) { EmptyView() }
+            .hidden()
         }
-        let root = NavigationView {
-            MiniChatPage(conversation: info.conversation, locateMessage: info.locateMessage, onBack: returnToSource)
-                .navigationBarHidden(true)
-        }
-        .navigationViewStyle(StackNavigationViewStyle())
-        .environmentObject(themeState)
-        .environmentObject(languageState)
-        .environment(\.layoutDirection, layoutDirection)
-        .preferredColorScheme(themeState.isDarkMode ? .dark : .light)
-        .navigationBarHidden(true)
-        let controller = MiniContactChatHostingController(rootView: AnyView(root))
-        controller.hidesBottomBarWhenPushed = true
-        navigationController.pushViewController(controller, animated: true)
     }
 }
 
 private struct ContactsDestination: View {
-    @EnvironmentObject private var themeState: ThemeState
-    @EnvironmentObject private var languageState: LanguageState
-    @Environment(\.layoutDirection) private var layoutDirection
-    @State private var hostViewController: UIViewController?
+    @State private var currentConversation: ConversationInfo?
+    @State private var showChat = false
 
     var body: some View {
         ContactsPage(
-            onContactClick: { item in
+            config: nil,                      // 联系人列表配置，nil 使用默认配置
+            onContactClick: { item in         // 联系人点击回调，返回联系人信息
                 openChat(makeC2CConversation(item))
             },
-            onGroupClick: { item in
+            onGroupClick: { item in           // 群点击回调，返回群信息
                 openChat(makeGroupConversation(item))
             }
         )
-        .background(MiniViewControllerBeacon { hostViewController = $0 })
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarHidden(true)
+        .background(SwipeBackSupport())
+        .background(chatNavigationLink)
+    }
+
+    // 联系人或群被点击后，使用同一个隐藏链接打开对应聊天页。
+    @ViewBuilder
+    private var chatNavigationLink: some View {
+        if let conversation = currentConversation {
+            NavigationLink(
+                destination: ChatPageDestination(
+                    conversation: conversation,
+                    locateMessage: nil
+                ),
+                isActive: $showChat
+            ) { EmptyView() }
+            .hidden()
+        }
     }
 
     private func openChat(_ conversation: ConversationInfo) {
-        guard let navigationController = hostViewController?.navigationController,
-              let sourceController = navigationController.topViewController,
-              !(sourceController is MiniContactChatHostingController),
-              navigationController.transitionCoordinator == nil else { return }
-        let returnToSource = { [weak navigationController, weak sourceController] in
-            guard let navigationController = navigationController,
-                  let sourceController = sourceController,
-                  navigationController.viewControllers.contains(where: { $0 === sourceController }) else { return }
-            navigationController.popToViewController(sourceController, animated: true)
-        }
-        let root = NavigationView {
-            MiniChatPage(conversation: conversation, onBack: returnToSource)
-                .navigationBarHidden(true)
-        }
-        .navigationViewStyle(StackNavigationViewStyle())
-        .environmentObject(themeState)
-        .environmentObject(languageState)
-        .environment(\.layoutDirection, layoutDirection)
-        .preferredColorScheme(themeState.isDarkMode ? .dark : .light)
-        .navigationBarHidden(true)
-        let controller = MiniContactChatHostingController(rootView: AnyView(root))
-        controller.hidesBottomBarWhenPushed = true
-        navigationController.pushViewController(controller, animated: true)
+        currentConversation = conversation
+        showChat = true
     }
 
-    private func makeC2CConversation(_ user: AZOrderedListItem) -> ConversationInfo {
-        var conversation = ConversationInfo(conversationID: ChatUtil.getC2CConversationID(user.id))
+    private func makeC2CConversation(_ contact: ContactInfo) -> ConversationInfo {
+        var conversation = ConversationInfo(conversationID: ChatUtil.getC2CConversationID(contact.userID))
         conversation.type = .c2c
-        conversation.title = user.title ?? user.id
-        conversation.avatarURL = user.avatarURL
+        conversation.title = [contact.friendRemark, contact.nickname].compactMap { $0 }.first { !$0.isEmpty } ?? contact.userID
+        conversation.avatarURL = contact.avatarURL
         return conversation
     }
 
-    private func makeGroupConversation(_ group: AZOrderedListItem) -> ConversationInfo {
-        var conversation = ConversationInfo(conversationID: ChatUtil.getGroupConversationID(group.id))
+    private func makeGroupConversation(_ group: GroupInfo) -> ConversationInfo {
+        var conversation = ConversationInfo(conversationID: ChatUtil.getGroupConversationID(group.groupID))
         conversation.type = .group
-        conversation.title = group.title ?? group.id
+        conversation.title = [group.groupName].compactMap { $0 }.first { !$0.isEmpty } ?? group.groupID
         conversation.avatarURL = group.avatarURL
         return conversation
     }
 }
 
-private struct MiniChatPage: View {
+private struct ChatPageDestination: View {
+    @Environment(\.dismiss) private var dismiss
     let conversation: ConversationInfo
     var locateMessage: MessageInfo? = nil
-    let onBack: () -> Void
+
 
     var body: some View {
         ChatPage(
-            conversation: conversation,
-            locateMessage: locateMessage,
-            messageInputConfig: CustomLinkMessageManager.makeInputConfig(conversationID: conversation.conversationID),
-            onBack: onBack
+            conversation: conversation,      // 会话信息
+            locateMessage: locateMessage,    // 需要定位的消息，nil 不指定定位消息
+            messageListConfig: nil,          // 消息列表配置，nil 使用默认配置
+            messageInputConfig: CustomLinkMessageManager.makeInputConfig(
+                conversationID: conversation.conversationID
+            ),                              // 输入配置，包含示例自定义消息入口
+            isShowMoreButton: true,          // 是否显示导航栏的更多按钮
+            showsNavigationBar: true,        // 是否显示 SDK 自绘导航栏
+            topBannerView: nil,              // 自定义顶部横幅，nil 不显示
+            onBack: { dismiss() },           // 返回按钮点击回调
+            onUserClick: nil,                // 用户点击回调，返回用户 ID
+            onMoreClick: nil                 // 导航栏标题或更多按钮点击回调
         )
+        .navigationBarHidden(true)
+        .background(SwipeBackSupport())
+    }
+
+    private func makeMessageInputConfig () -> ChatMessageInputConfig {
+        var inputConfig = ChatMessageInputConfig()
+        inputConfig.isShowVideoCall = false
+        inputConfig.isShowAudioCall = false
+        return inputConfig
     }
 }
 
-private final class MiniContactChatHostingController: UIHostingController<AnyView> {
-    private var previousNavigationBarHidden: Bool?
-
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        guard let navigationController = navigationController else { return }
-        if previousNavigationBarHidden == nil {
-            previousNavigationBarHidden = navigationController.isNavigationBarHidden
-        }
-        navigationController.setNavigationBarHidden(true, animated: animated)
+// 页面级桥接恢复原生左边缘右滑返回，不使用全局 Hook。
+private struct SwipeBackSupport: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller {
+        Controller()
     }
 
-    override func viewWillDisappear(_ animated: Bool) {
-        super.viewWillDisappear(animated)
-        guard let navigationController = navigationController,
-              let previousNavigationBarHidden = previousNavigationBarHidden else { return }
-        navigationController.setNavigationBarHidden(previousNavigationBarHidden, animated: animated)
-        self.previousNavigationBarHidden = nil
-    }
-}
+    func updateUIViewController(_ uiViewController: Controller, context: Context) {}
 
-private struct MiniViewControllerBeacon: UIViewRepresentable {
-    let onFound: (UIViewController) -> Void
+    final class Controller: UIViewController {
+        private weak var popGesture: UIGestureRecognizer?
+        private weak var previousDelegate: UIGestureRecognizerDelegate?
 
-    func makeUIView(context: Context) -> BeaconView {
-        BeaconView(onFound: onFound)
-    }
-
-    func updateUIView(_ uiView: BeaconView, context: Context) {}
-
-    final class BeaconView: UIView {
-        private let onFound: (UIViewController) -> Void
-
-        init(onFound: @escaping (UIViewController) -> Void) {
-            self.onFound = onFound
-            super.init(frame: .zero)
-            isHidden = true
+        override func viewDidAppear(_ animated: Bool) {
+            super.viewDidAppear(animated)
+            guard let navigationController = navigationController,
+                  navigationController.viewControllers.count > 1,
+                  let gesture = navigationController.interactivePopGestureRecognizer else { return }
+            previousDelegate = gesture.delegate
+            popGesture = gesture
+            gesture.delegate = nil
+            gesture.isEnabled = true
         }
 
-        @available(*, unavailable)
-        required init?(coder: NSCoder) { fatalError() }
-
-        override func didMoveToWindow() {
-            super.didMoveToWindow()
-            guard window != nil else { return }
-            var responder = next
-            while let current = responder {
-                if let controller = current as? UIViewController {
-                    onFound(controller)
-                    return
-                }
-                responder = current.next
+        override func viewWillDisappear(_ animated: Bool) {
+            super.viewWillDisappear(animated)
+            if let gesture = popGesture, gesture.delegate == nil {
+                gesture.delegate = previousDelegate
             }
-        }
-    }
-}
-
-private final class PopGestureDelegateProxy: NSObject, UIGestureRecognizerDelegate {
-    private weak var navigationController: UINavigationController?
-
-    init(navigationController: UINavigationController) {
-        self.navigationController = navigationController
-        super.init()
-    }
-
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        guard let navigationController = navigationController,
-              navigationController.transitionCoordinator == nil,
-              let root = navigationController.viewIfLoaded?.window?.rootViewController else { return false }
-        return InteractivePopGestureEnabler.popOwner(in: root) === navigationController
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive event: UIEvent) -> Bool {
-        true
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        true
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRequireFailureOf otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        false
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        false
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        !(otherGestureRecognizer.delegate is PopGestureDelegateProxy)
-    }
-}
-
-private final class InteractivePopGestureEnabler {
-    static let shared = InteractivePopGestureEnabler()
-    private static let installationDelay: TimeInterval = 0.15
-    private static let installationRetries = 20
-    private static var proxyKey: UInt8 = 0
-    private static let appearanceHook: Void = {
-        guard let original = class_getInstanceMethod(UIViewController.self, #selector(UIViewController.viewDidAppear(_:))),
-              let replacement = class_getInstanceMethod(UIViewController.self, #selector(UIViewController.chatDemoPopViewDidAppear(_:))) else { return }
-        method_exchangeImplementations(original, replacement)
-    }()
-
-    private var pendingTransitions = Set<ObjectIdentifier>()
-
-    private init() {}
-
-    func scheduleInstall() {
-        _ = Self.appearanceHook
-        install(remainingRetries: Self.installationRetries)
-    }
-
-    func refresh() {
-        for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) where scene.activationState == .foregroundActive {
-            for window in scene.windows where !window.isHidden {
-                guard let root = window.rootViewController else { continue }
-                Self.visibleNavigationControllers(in: root).forEach { install(on: $0) }
-            }
-        }
-    }
-
-    static func popOwner(in root: UIViewController) -> UINavigationController? {
-        visibleNavigationControllers(in: root).last { $0.viewControllers.count > 1 }
-    }
-
-    private func install(remainingRetries: Int) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.installationDelay) { [self] in
-            refresh()
-            if remainingRetries > 0 {
-                install(remainingRetries: remainingRetries - 1)
-            }
-        }
-    }
-
-    private func install(on navigationController: UINavigationController, remainingRetries: Int = InteractivePopGestureEnabler.installationRetries) {
-        guard let gesture = navigationController.interactivePopGestureRecognizer else { return }
-        if let transition = navigationController.transitionCoordinator {
-            let identifier = ObjectIdentifier(navigationController)
-            guard pendingTransitions.insert(identifier).inserted else { return }
-            let registered = transition.animate(alongsideTransition: nil) { [weak self] _ in
-                DispatchQueue.main.async {
-                    self?.pendingTransitions.remove(identifier)
-                    self?.refresh()
-                }
-            }
-            if registered { return }
-            pendingTransitions.remove(identifier)
-            retryInstall(on: navigationController, remainingRetries: remainingRetries)
-            return
-        }
-        guard gesture.state == .possible else {
-            retryInstall(on: navigationController, remainingRetries: remainingRetries)
-            return
-        }
-        let proxy: PopGestureDelegateProxy
-        if let existing = objc_getAssociatedObject(gesture, &Self.proxyKey) as? PopGestureDelegateProxy {
-            proxy = existing
-        } else {
-            proxy = PopGestureDelegateProxy(navigationController: navigationController)
-            objc_setAssociatedObject(gesture, &Self.proxyKey, proxy, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
-        }
-        gesture.delegate = proxy
-        gesture.isEnabled = true
-    }
-
-    private func retryInstall(on navigationController: UINavigationController, remainingRetries: Int) {
-        guard remainingRetries > 0 else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.installationDelay) { [weak self, weak navigationController] in
-            guard let self = self,
-                  let navigationController = navigationController,
-                  let root = navigationController.viewIfLoaded?.window?.rootViewController,
-                  Self.visibleNavigationControllers(in: root).contains(where: { $0 === navigationController }) else { return }
-            self.install(on: navigationController, remainingRetries: remainingRetries - 1)
-        }
-    }
-
-    private static func visibleNavigationControllers(in controller: UIViewController) -> [UINavigationController] {
-        if let presented = controller.presentedViewController, !presented.isBeingDismissed {
-            return visibleNavigationControllers(in: presented)
-        }
-        if let navigationController = controller as? UINavigationController {
-            return [navigationController] + (navigationController.visibleViewController.map { visibleNavigationControllers(in: $0) } ?? [])
-        }
-        if let tabController = controller as? UITabBarController {
-            return tabController.selectedViewController.map { visibleNavigationControllers(in: $0) } ?? []
-        }
-        return controller.children.reversed().filter {
-            $0.viewIfLoaded?.window != nil && $0.viewIfLoaded?.isHidden == false
-        }.lazy.map { visibleNavigationControllers(in: $0) }.first { !$0.isEmpty } ?? []
-    }
-}
-
-private extension UIViewController {
-    @objc func chatDemoPopViewDidAppear(_ animated: Bool) {
-        chatDemoPopViewDidAppear(animated)
-        DispatchQueue.main.async {
-            InteractivePopGestureEnabler.shared.refresh()
+            popGesture = nil
+            previousDelegate = nil
         }
     }
 }

@@ -14,15 +14,15 @@ struct ContactListImpl: View {
     @State private var showBlackList: Bool = false
 
     private let config: ContactListConfigProtocol
-    private let onContactClick: ((AZOrderedListItem) -> Void)?
-    private let onGroupClick: ((AZOrderedListItem) -> Void)?
+    private let onContactClick: ((ContactInfo) -> Void)?
+    private let onGroupClick: ((GroupInfo) -> Void)?
 
     init(
         config: ContactListConfigProtocol? = nil,
-        onContactClick: ((AZOrderedListItem) -> Void)? = nil,
-        onGroupClick: ((AZOrderedListItem) -> Void)? = nil
+        onContactClick: ((ContactInfo) -> Void)? = nil,
+        onGroupClick: ((GroupInfo) -> Void)? = nil
     ) {
-        self.config = config ?? ChatContactListConfig()
+        self.config = config ?? ContactListConfig()
         self.onContactClick = onContactClick
         self.onGroupClick = onGroupClick
     }
@@ -49,7 +49,8 @@ struct ContactListImpl: View {
                 header: isSearching ? nil : AnyView(navigationHeader),
                 onUserInteraction: hideKeyboard,
                 onItemClick: { user in
-                    onContactClick?(user)
+                    guard let contact = user.extraData as? ContactInfo else { return }
+                    onContactClick?(contact)
                 }
             )
         }
@@ -65,7 +66,8 @@ struct ContactListImpl: View {
         .background(
             NavigationLink(
                 destination: GroupListView(
-                    onGroupClick: { group in
+                    onGroupClick: { item in
+                        guard let group = item.extraData as? GroupInfo else { return }
                         onGroupClick?(group)
                     },
                     onDismiss: { showGroupList = false }
@@ -79,7 +81,8 @@ struct ContactListImpl: View {
         .background(
             NavigationLink(
                 destination: BlackListView(
-                    onContactClick: { contact in
+                    onContactClick: { item in
+                        guard let contact = item.extraData as? ContactInfo else { return }
                         onContactClick?(contact)
                     },
                     onDismiss: { showBlackList = false }

@@ -32,7 +32,7 @@ public enum ContactListItemIDs {
     public static let blacklist = "contactList.blacklist"
 }
 
-public struct ChatContactListConfig {
+public struct ContactListConfig {
     public var userShowNewContacts: Bool? = nil
     public var userShowGroupApplications: Bool? = nil
     public var userShowMyGroups: Bool? = nil

@@ -62,11 +62,18 @@ enum ExperimentalAPIImpl {
                                     sourceLanguage: String = "",
                                     onSuccess: @escaping (String) -> Void,
                                     onFailure: @escaping (Int32, String) -> Void) {
-        guard let manager = VideoRecorderReflectUtil.invokeStaticMethod("V2TIMManager", methodName: "sharedInstance", withArguments: []) else {
+        typealias CallbackBlock = @convention(block) (Int32, AnyObject?, AnyObject?) -> Void
+        typealias TranslateFunction = @convention(c) (AnyObject, Selector, NSArray, NSString?, NSString, CallbackBlock) -> Void
+        // SDK selector 的尾部参数为 completion，使用错误名称将无法收到回调。
+        guard let manager = VideoRecorderReflectUtil.sharedInstance(of: "V2TIMManager"),
+              let invocation = VideoRecorderReflectUtil.invocation(
+                  manager,
+                  methodName: "translateText:sourceLanguage:targetLanguage:completion:",
+                  as: TranslateFunction.self
+              ) else {
             onFailure(errorUnknown, "V2TIMManager unavailable")
             return
         }
-        typealias CallbackBlock = @convention(block) (Int32, AnyObject?, AnyObject?) -> Void
         let callback: CallbackBlock = { code, desc, result in
             DispatchQueue.main.async {
                 if code != 0 {
@@ -81,11 +88,13 @@ enum ExperimentalAPIImpl {
                 onSuccess(translated)
             }
         }
-        // SDK selector 的尾部参数为 completion，使用错误名称将无法收到回调。
-        VideoRecorderReflectUtil.invokeMethod(
-            manager,
-            methodName: "translateText:sourceLanguage:targetLanguage:completion:",
-            withArguments: [[text], sourceLanguage.isEmpty ? NSNull() : sourceLanguage, targetLanguage, callback]
+        invocation.function(
+            invocation.target,
+            invocation.selector,
+            [text] as NSArray,
+            sourceLanguage.isEmpty ? nil : sourceLanguage as NSString,
+            targetLanguage as NSString,
+            callback
         )
     }
 
@@ -170,8 +179,8 @@ enum ExperimentalAPIImpl {
 
 
     static func sdkVersion() -> String {
-        guard let manager = VideoRecorderReflectUtil.invokeStaticMethod("V2TIMManager", methodName: "sharedInstance", withArguments: []) else { return "" }
-        let version = VideoRecorderReflectUtil.invokeMethod(manager, methodName: "getVersion", withArguments: [])
+        guard let manager = VideoRecorderReflectUtil.sharedInstance(of: "V2TIMManager") else { return "" }
+        let version = VideoRecorderReflectUtil.invokeObjectMethod(manager, methodName: "getVersion")
         return (version as? String) ?? ""
     }
 

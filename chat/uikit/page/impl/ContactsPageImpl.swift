@@ -7,22 +7,18 @@ struct ContactsPageImpl: View {
     @State private var showAddFriend = false
     @State private var showJoinGroup = false
     @State private var addMenuAnchor: CGRect = .zero
-    let config: ChatContactListConfig
-    let onContactClick: ((AZOrderedListItem) -> Void)?
-    let onGroupClick: ((AZOrderedListItem) -> Void)?
+    let config: ContactListConfig
+    let onContactClick: ((ContactInfo) -> Void)?
+    let onGroupClick: ((GroupInfo) -> Void)?
 
     init(
-        config: ChatContactListConfig? = nil,
-        onContactClick: ((AZOrderedListItem) -> Void)? = nil,
-        onGroupClick: ((AZOrderedListItem) -> Void)? = nil
+        config: ContactListConfig? = nil,
+        onContactClick: ((ContactInfo) -> Void)? = nil,
+        onGroupClick: ((GroupInfo) -> Void)? = nil
     ) {
-        self.config = config ?? ChatContactListConfig()
+        self.config = config ?? ContactListConfig()
         self.onContactClick = onContactClick
         self.onGroupClick = onGroupClick
-    }
-
-    func openGroupChat(_ item: AZOrderedListItem) {
-        onGroupClick?(item)
     }
 
     var body: some View {
@@ -31,7 +27,7 @@ struct ContactsPageImpl: View {
             ContactListView(
                 config: config,
                 onContactClick: onContactClick,
-                onGroupClick: { item in openGroupChat(item) }
+                onGroupClick: onGroupClick
             )
         }
         .background(themeState.colors.bgColorOperate.ignoresSafeArea(edges: .top))
@@ -57,12 +53,7 @@ struct ContactsPageImpl: View {
             NavigationLink(
                 destination: JoinGroupView(
                     onEnterGroupChat: { groupInfo in
-                        openGroupChat(AZOrderedListItem(
-                            userID: groupInfo.groupID,
-                            avatarURL: groupInfo.avatarURL,
-                            title: groupInfo.groupName ?? groupInfo.groupID,
-                            extraData: groupInfo
-                        ))
+                        onGroupClick?(groupInfo)
                     }
                 ),
                 isActive: $showJoinGroup

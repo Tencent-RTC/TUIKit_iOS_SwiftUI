@@ -21,7 +21,7 @@ public struct HomePage: View {
 
     @State private var currentConversation: ConversationInfo? = nil
     @State private var currentLocateMessage: MessageInfo? = nil
-    @State private var currentContactUser: AZOrderedListItem? = nil
+    @State private var currentContactUser: ContactInfo? = nil
     @State private var contactsHostViewController: UIViewController?
     @State private var chatsHostViewController: UIViewController?
 
@@ -348,7 +348,7 @@ public struct HomePage: View {
         }
     }
 
-    private func showC2CChatSetting(    _ user: AZOrderedListItem) {
+    private func showC2CChatSetting(    _ user: ContactInfo) {
         currentContactUser = user
         showC2CChatSetting = true
     }
@@ -361,19 +361,19 @@ public struct HomePage: View {
         showC2CChatSetting = false
     }
 
-    private func createConversationFromUser(_ user: AZOrderedListItem) -> ConversationInfo {
-        var conversation = ConversationInfo(conversationID: ChatUtil.getC2CConversationID(user.id))
+    private func createConversationFromUser(_ user: ContactInfo) -> ConversationInfo {
+        var conversation = ConversationInfo(conversationID: ChatUtil.getC2CConversationID(user.userID))
         conversation.avatarURL = user.avatarURL
         conversation.type = .c2c
-        conversation.title = user.title ?? user.id
+        conversation.title = [user.friendRemark, user.nickname].compactMap { $0 }.first { !$0.isEmpty } ?? user.userID
         return conversation
     }
 
-    private func createConversationFromGroup(_ group: AZOrderedListItem) -> ConversationInfo {
-        var conversation = ConversationInfo(conversationID: ChatUtil.getGroupConversationID(group.id))
+    private func createConversationFromGroup(_ group: GroupInfo) -> ConversationInfo {
+        var conversation = ConversationInfo(conversationID: ChatUtil.getGroupConversationID(group.groupID))
         conversation.avatarURL = group.avatarURL
         conversation.type = .group
-        conversation.title = group.title ?? group.id
+        conversation.title = [group.groupName].compactMap { $0 }.first { !$0.isEmpty } ?? group.groupID
         return conversation
     }
 
