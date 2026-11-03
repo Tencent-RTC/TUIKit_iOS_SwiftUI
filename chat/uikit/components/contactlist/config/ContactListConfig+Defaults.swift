@@ -1,7 +1,7 @@
 import AtomicXCore
 import SwiftUI
 
-extension ChatContactListConfig: ContactListConfigProtocol {
+extension ContactListConfig: ContactListConfigProtocol {
     public var showNewContacts: Bool {
         get { userShowNewContacts ?? true }
         set { userShowNewContacts = newValue }

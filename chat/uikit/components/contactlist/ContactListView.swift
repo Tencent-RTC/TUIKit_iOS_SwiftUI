@@ -6,12 +6,12 @@ public struct ContactListView: View {
     private let implementation: ContactListImpl
 
     public init(
-        config: ChatContactListConfig? = nil,
-        onContactClick: ((AZOrderedListItem) -> Void)? = nil,
-        onGroupClick: ((AZOrderedListItem) -> Void)? = nil
+        config: ContactListConfig? = nil,
+        onContactClick: ((ContactInfo) -> Void)? = nil,
+        onGroupClick: ((GroupInfo) -> Void)? = nil
     ) {
         implementation = ContactListImpl(
-            config: config ?? ChatContactListConfig(),
+            config: config ?? ContactListConfig(),
             onContactClick: onContactClick,
             onGroupClick: onGroupClick
         )

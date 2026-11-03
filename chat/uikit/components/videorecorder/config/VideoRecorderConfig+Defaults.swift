@@ -63,3 +63,26 @@ extension VideoRecorderConfig {
         set { userIsSupportAspect = newValue }
     }
 }
+
+struct VideoRecorderSettings {
+    let recordMode: RecordMode
+    let videoQuality: VideoQuality
+    let minDurationMs: Int
+    let maxDurationMs: Int
+    let isDefaultFrontCamera: Bool
+    let isSupportTorch: Bool
+    let isSupportAspect: Bool
+
+    init(config: VideoRecorderConfig?) {
+        let config = config ?? VideoRecorderConfig()
+        let maxDuration = config.maxDurationMs > 0 ? config.maxDurationMs : VideoRecorderConfig.defaultMaxDurationMs
+        let minDuration = config.minDurationMs > 0 ? config.minDurationMs : VideoRecorderConfig.defaultMinDurationMs
+        maxDurationMs = Int(Int32(clamping: maxDuration))
+        minDurationMs = min(Int(Int32(clamping: minDuration)), maxDurationMs)
+        recordMode = config.recordMode
+        videoQuality = config.videoQuality
+        isDefaultFrontCamera = config.isDefaultFrontCamera
+        isSupportTorch = config.isSupportTorch
+        isSupportAspect = config.isSupportAspect
+    }
+}
