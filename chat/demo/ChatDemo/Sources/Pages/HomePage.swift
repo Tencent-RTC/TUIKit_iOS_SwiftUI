@@ -11,6 +11,7 @@ public struct HomePage: View {
     @Environment(\.layoutDirection) private var layoutDirection
     @StateObject private var homeToast = Toast()
     @State private var selectedTab: Tab = .chats
+    @AppStorage("show_calls_tab") private var showCallsTab: Bool = true
     @StateObject private var storeHolder = HomePageStoreHolder()
     @State private var totalUnreadCount: UInt = 0
     @State private var friendApplicationUnreadCount: Int = 0
@@ -53,6 +54,18 @@ public struct HomePage: View {
         )
     }
 
+    @ViewBuilder private var callsTab: some View {
+        if showCallsTab {
+            RecentCallsPage()
+                .tabItem {
+                    tabLabel(title: LocalizedChatString("TabCalls"), baseName: "tab_calls", tab: .calls)
+                }
+                .tag(Tab.calls)
+                .navigationTitle("")
+                .navigationBarHidden(true)
+        }
+    }
+
     private var contactsTab: some View {
         ContactsPage(
             onContactClick: { user in
@@ -85,12 +98,19 @@ public struct HomePage: View {
         ZStack {
             TabView(selection: self.$selectedTab) {
                 chatsTab
+                callsTab
                 contactsTab
                 settingsTab
             }
             .id("TabView-\(themeState.currentTheme.mode)")
             .background(themeState.colors.bgColorOperate)
             .onAppear {
+                updateTabBarAppearance()
+            }
+            .onChange(of: showCallsTab) { isVisible in
+                if !isVisible && selectedTab == .calls {
+                    selectedTab = .chats
+                }
                 updateTabBarAppearance()
             }
             .onChange(of: themeState.currentTheme.mode) { _ in
@@ -249,7 +269,7 @@ public struct HomePage: View {
     private static let tabIconGradientEnd = CGPoint(x: -0.24, y: 0.6875)
     private func renderTabIcons() {
         guard let tabBarController = findTabBarController() else { return }
-        TabBadgeManager.shared.attach(tabBarController: tabBarController, contactsTabIndex: 1, conversationListStore: conversationListStore) {
+        TabBadgeManager.shared.attach(tabBarController: tabBarController, contactsTabIndex: showCallsTab ? 2 : 1, conversationListStore: conversationListStore) {
             selectedTab = .chats
         }
     }
@@ -402,7 +422,7 @@ private final class ContactChatHostingController: UIHostingController<AnyView> {
 }
 
     enum Tab {
-        case chats, contacts, settings
+        case chats, calls, contacts, settings
     }
 
 
