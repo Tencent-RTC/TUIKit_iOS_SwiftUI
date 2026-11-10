@@ -57,6 +57,7 @@ struct SettingsPage: View {
     @State private var avatarURL: String? = nil
     @State private var selfSignature: String? = nil
     @AppStorage("com.atomicx.enableReadReceipt") private var enableReadReceipt: Bool = false
+    @AppStorage("show_calls_tab") private var showCallsTab: Bool = true
     @State private var activeSheet: SettingsSheetKind? = nil
     @State private var showProfileDetail = false
     @State private var showColorPicker = false
@@ -307,11 +308,26 @@ struct SettingsPage: View {
         .background(themeState.colors.bgColorOperate)
     }
 
+    private var callsTabRow: some View {
+        Toggle(isOn: $showCallsTab) {
+            Text(LocalizedChatString("SettingsShowCalls"))
+                .font(FontScheme.caption1Regular)
+                .foregroundColor(themeState.colors.textColorSecondary)
+        }
+        .tint(themeState.colors.switchColorOn)
+        .padding(.horizontal, CGFloat(SpacingScheme.bubbleSpacing))
+        .padding(.vertical, CGFloat(SpacingScheme.iconIconSpacing))
+        .frame(minHeight: 48)
+        .background(themeState.colors.bgColorOperate)
+    }
+
     private var groupTwo: some View {
         VStack(spacing: 0) {
             entryRow(title: LocalizedChatString("MeFriendRequest"), value: approveValueText()) { activeSheet = .approve }
             rowDivider
             readReceiptRow
+            rowDivider
+            callsTabRow
             rowDivider
             entryRow(title: LocalizedChatString("TranslateMessage"), value: translateValueText()) { activeSheet = .translate }
             rowDivider

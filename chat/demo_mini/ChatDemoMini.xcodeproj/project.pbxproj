@@ -8,21 +8,54 @@
 
 /* Begin PBXBuildFile section */
 		05C85175EAAAA7BA9A4742CF /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 802F2D0309EE7E7B14737C9E /* Localizable.strings */; };
+		47C1FFA0CF44BD2F9434477E /* Pods_ChatDemoMini.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A9FC96E4CB8399B81F0A71C /* Pods_ChatDemoMini.framework */; };
 		52911396E2C14195097C1179 /* ChatDemoMiniApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D9C043ACD1469C67509BDEF8 /* ChatDemoMiniApp.swift */; };
 		6298ABB418F6BD781160144B /* CustomLinkMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74FF265C1BDC6A40DB05DDFD /* CustomLinkMessage.swift */; };
 		E51E3228C7A247ACB88C60A3 /* GenerateTestUserSig.swift in Sources */ = {isa = PBXBuildFile; fileRef = D48B8C0C6E8A68F93FAD048F /* GenerateTestUserSig.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		27858E2100273919A2457E8B /* ChatDemoMini.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = ChatDemoMini.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		27858E2100273919A2457E8B /* ChatDemoMini.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ChatDemoMini.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		478ED39BDC81C3D4D7B8DB0F /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		74FF265C1BDC6A40DB05DDFD /* CustomLinkMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomLinkMessage.swift; sourceTree = "<group>"; };
+		7A9FC96E4CB8399B81F0A71C /* Pods_ChatDemoMini.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_ChatDemoMini.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		7B36F0412AF38B493FCE6496 /* Pods-ChatDemoMini.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ChatDemoMini.release.xcconfig"; path = "Target Support Files/Pods-ChatDemoMini/Pods-ChatDemoMini.release.xcconfig"; sourceTree = "<group>"; };
 		C0ED0F2D1CDECB7C623B9157 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		D48B8C0C6E8A68F93FAD048F /* GenerateTestUserSig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GenerateTestUserSig.swift; sourceTree = "<group>"; };
 		D9C043ACD1469C67509BDEF8 /* ChatDemoMiniApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatDemoMiniApp.swift; sourceTree = "<group>"; };
+		E4A8EC1EB35D57747C3ED3A1 /* Pods-ChatDemoMini.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ChatDemoMini.debug.xcconfig"; path = "Target Support Files/Pods-ChatDemoMini/Pods-ChatDemoMini.debug.xcconfig"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFrameworksBuildPhase section */
+		B672D7D6CBBDD021C9FF4093 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				47C1FFA0CF44BD2F9434477E /* Pods_ChatDemoMini.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
 /* Begin PBXGroup section */
+		11D3EEA8F25635DF8C88B3F1 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				E4A8EC1EB35D57747C3ED3A1 /* Pods-ChatDemoMini.debug.xcconfig */,
+				7B36F0412AF38B493FCE6496 /* Pods-ChatDemoMini.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
+		511F9732815E434264A648FD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				7A9FC96E4CB8399B81F0A71C /* Pods_ChatDemoMini.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		8D75BE6BDC3A3F86AFBA892C /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -47,6 +80,8 @@
 			children = (
 				9C634BD6287AED9AA73B6760 /* Sources */,
 				8D75BE6BDC3A3F86AFBA892C /* Products */,
+				11D3EEA8F25635DF8C88B3F1 /* Pods */,
+				511F9732815E434264A648FD /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -57,16 +92,18 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 086E57D7206EA81DCC266298 /* Build configuration list for PBXNativeTarget "ChatDemoMini" */;
 			buildPhases = (
+				A1B4F0A94D489880D8AACB49 /* [CP] Check Pods Manifest.lock */,
 				7CFA18B8652602CA4641FD43 /* Sources */,
 				718ACF54C2AE8617D66A3D7E /* Resources */,
+				B672D7D6CBBDD021C9FF4093 /* Frameworks */,
+				7D42B9287E3C03BA391F6FCE /* [CP] Embed Pods Frameworks */,
+				D693DFBAAE735CD49BC44E6D /* [CP] Copy Pods Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			name = ChatDemoMini;
-			packageProductDependencies = (
-			);
 			productName = ChatDemoMini;
 			productReference = 27858E2100273919A2457E8B /* ChatDemoMini.app */;
 			productType = "com.apple.product-type.application";
@@ -79,11 +116,6 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
-				TargetAttributes = {
-					6D71D502CD3C8D32553A67A0 = {
-						ProvisioningStyle = Automatic;
-					};
-				};
 			};
 			buildConfigurationList = 35D23442C88BCA51F674E326 /* Build configuration list for PBXProject "ChatDemoMini" */;
 			developmentRegion = en;
@@ -116,6 +148,65 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		7D42B9287E3C03BA391F6FCE /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-ChatDemoMini/Pods-ChatDemoMini-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-ChatDemoMini/Pods-ChatDemoMini-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-ChatDemoMini/Pods-ChatDemoMini-frameworks.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		A1B4F0A94D489880D8AACB49 /* [CP] Check Pods Manifest.lock */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
+				"${PODS_ROOT}/Manifest.lock",
+			);
+			name = "[CP] Check Pods Manifest.lock";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+				"$(DERIVED_FILE_DIR)/Pods-ChatDemoMini-checkManifestLockResult.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
+			showEnvVarsInLog = 0;
+		};
+		D693DFBAAE735CD49BC44E6D /* [CP] Copy Pods Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-ChatDemoMini/Pods-ChatDemoMini-resources-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			name = "[CP] Copy Pods Resources";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-ChatDemoMini/Pods-ChatDemoMini-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-ChatDemoMini/Pods-ChatDemoMini-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		7CFA18B8652602CA4641FD43 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -144,6 +235,7 @@
 /* Begin XCBuildConfiguration section */
 		06CEC58C7A2F8A3B6793FBE0 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = 7B36F0412AF38B493FCE6496 /* Pods-ChatDemoMini.release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
@@ -225,6 +317,7 @@
 		};
 		54C05D95F4B45C2B7CE1E2E2 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E4A8EC1EB35D57747C3ED3A1 /* Pods-ChatDemoMini.debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";

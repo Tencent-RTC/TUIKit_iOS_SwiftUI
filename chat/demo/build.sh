@@ -71,8 +71,8 @@ function checkLocalDependencies() {
         echo "Error: ios_swiftui/chat/uikit/TUIChatKit_Swift.podspec not found."
         exit 1
     fi
-    if [[ ! -f "${SHELL_DIR}/../../../ios/call/TUICallKit_Swift.podspec" ]]; then
-        echo "Error: ios/call/TUICallKit_Swift.podspec not found."
+    if [[ ! -f "${SHELL_DIR}/../../call/TUICallKit_Swift.podspec" ]]; then
+        echo "Error: call/TUICallKit_Swift.podspec not found."
         exit 1
     fi
     echo "Found TUIChatKit_Swift and TUICallKit_Swift source dependencies (in-repo)"
